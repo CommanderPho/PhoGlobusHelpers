@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "phoglobushelpers"
+version = "0.1.0"
+description = "A series of helpers to help the lab with Globus Endpoint related tasks"
+authors = ["Pho Hale <PhoHale@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+globus-sdk = "^3.17.0"
+globus-cli = "^3.11.0"
+pathlib = "^1.0.1"
+wheel = "^0.38.4"
+
+[tool.poetry.group.dev.dependencies]
+setuptools = "^67.6.0"
+wheel = "^0.38.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
