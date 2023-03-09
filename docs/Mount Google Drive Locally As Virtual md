@@ -1,0 +1,59 @@
+# Mount Google Drive Locally As Virtual File System Using Rclone
+
+
+List available google drives:
+
+rclone listremotes
+
+
+Create a mount point to mount your google drive files:
+
+$ mkdir ~/drive
+
+Then, mount the Google drive using command:
+
+$ rclone mount mygoogledrive: ~/drive/
+
+You can mount a specific directory/file from the google drive like below.
+
+$ rclone mount remote:path/to/files /path/to/local/mount
+
+To unmount, simply press "CTRL+c" to stop the mount.
+
+In my case, I mounted my Google drive in a mount point directory named "~/drive". Replace remote name (i.e mygoogledrive) and mount point name (i.e ~/drive) with your own values.
+
+
+# Custom:
+
+rclone mount --daemon Diba_Lab_Shared_GDrive: /home/halechr/cloud/GDrive_Diba_Shared
+
+rclone mount --daemon Diba_Lab_UMich_Dropbox: /home/halechr/cloud/Dropbox_Diba_Shared
+
+rclone mount --daemon Pho_Personal_Dropbox: /home/halechr/cloud/Dropbox_Personal
+
+
+
+# Force unmount:
+The umount operation may fail, for example when the mount point is busy. When that happens, you can stop the mount manually using command:
+
+$ fusermount -u ~/drive
+
+
+mount_cloud_drive () {
+    local remote="$1"
+    local mount_location="$2"
+    if mountpoint -q "$mount_location"; then
+        return 0
+        # echo "The mount point is already mounted: $mount_location"
+    else
+        mkdir -p "$mount_location"
+        rclone mount --daemon "$remote" "$mount_location"
+    fi
+}
+
+# Mount Cloud Drives:
+mount_cloud_drive "Diba_Lab_Shared_GDrive:" "${HOME}/cloud/GDrive_Diba_Shared"
+mount_cloud_drive "Diba_Lab_UMich_Dropbox:" "${HOME}/cloud/Dropbox_Diba_Shared"
+# Personal Dropbox:
+mount_cloud_drive "Pho_Personal_Dropbox:" "${HOME}/cloud/Dropbox_Personal"
+
