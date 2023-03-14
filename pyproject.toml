@@ -7,10 +7,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-globus-sdk = "^3.17.0"
+globus-sdk = "^3.16.0"
 globus-cli = "^3.11.0"
 pathlib = "^1.0.1"
 wheel = "^0.38.4"
+ipython = "^8.11.0"
 
 [tool.poetry.group.dev.dependencies]
 setuptools = "^67.6.0"
