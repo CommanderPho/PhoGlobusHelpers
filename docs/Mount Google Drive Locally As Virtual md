@@ -51,9 +51,17 @@ mount_cloud_drive () {
     fi
 }
 
+unmount_cloud_drive () {
+    # Force unmount:
+    # The umount operation may fail, for example when the mount point is busy. When that happens, you can stop the mount manually using command:
+    local mount_location="$1"
+    fusermount -u "$mount_location"
+}
+
 # Mount Cloud Drives:
 mount_cloud_drive "Diba_Lab_Shared_GDrive:" "${HOME}/cloud/GDrive_Diba_Shared"
 mount_cloud_drive "Diba_Lab_UMich_Dropbox:" "${HOME}/cloud/Dropbox_Diba_Shared"
 # Personal Dropbox:
 mount_cloud_drive "Pho_Personal_Dropbox:" "${HOME}/cloud/Dropbox_Personal"
 
+"${HOME}/cloud/Dropbox_Personal"

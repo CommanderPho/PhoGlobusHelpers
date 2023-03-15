@@ -1,3 +1,72 @@
+# Installing and Configuring Globus Connect Personal on Linux:
+
+https://docs.globus.org/how-to/globus-connect-personal-linux/
+```bash
+sudo yum install tk tcllib
+mkdir -p ~/bin
+cd ~/bin
+mkdir -p globusconnectpersonal
+wget https://downloads.globus.org/globus-connect-personal/linux/stable/globusconnectpersonal-latest.tgz
+tar -xzf globusconnectpersonal-latest.tgz -C globusconnectpersonal --strip-components=1
+cd globusconnectpersonal
+./globusconnectpersonal
+```
+Since this is the first launch, and interactive setup GUI will appear and ask you to authenticate and such. Complete these steps.
+
+Once these steps are complete, configure your acessible directories via the GUI by going to:
+  `File > Preferences`
+Note that the "Shared" column's checkboxes do not need to be checked, this refers to a sharing feature within Globus itself and in general you want them unchecked.
+
+Click Save to confirm the changes.
+
+
+## Headless Setup:
+
+In general on my workstation I prefer to have Globus run silently in the background as a service. This allows me to access this endpoint whenever I need, including when I'm at home.
+
+Create a new file `~/.config/systemd/user/globusconnectpersonal.service` and open it in your favorite text editor:
+for example:
+```bash
+  nano ~/.config/systemd/user/globusconnectpersonal.service
+```
+Paste the following content into the file and save the changes (using Ctrl + o in nano)
+```
+[Unit]
+Description=Globus Connect Personal
+[Service]
+ExecStart=%h/bin/globusconnectpersonal/globusconnectpersonal -start -debug
+Restart=always
+RestartSec=60
+[Install]
+WantedBy=default.target
+```
+
+Finally, setup your account for "lingering" and start the service with the following commands:
+```bash
+
+# If you want your user units to start on boot and persist after you logout, enable "lingering" for your user:
+sudo loginctl enable-linger $USER
+
+systemctl --user start globusconnectpersonal
+systemctl --user enable globusconnectpersonal
+systemctl --user status globusconnectpersonal
+
+```
+
+You should be ready to go! Open the following URL in the browser:
+  https://app.globus.org/file-manager?origin_id=f418ea94-07aa-11ed-8d83-a54cf61939f8&origin_path=%2Fmedia%2FMAX%2F
+
+
+
+-----
+
+
+### Stopping the Globus Connect Personal Service:
+systemctl --user stop globusconnectpersonal
+
+
+
+
 # this is the contents of in.txt:
 # a list of source paths followed by destination paths
 
