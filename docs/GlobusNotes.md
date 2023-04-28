@@ -98,33 +98,47 @@ https://docs.globus.org/cli/examples/
 ```
 
 ep1=ddb59aef-6d04-11e5-ba46-22000b92c6ec
-$ ep2=ddb59af0-6d04-11e5-ba46-22000b92c6ec
+ep2=ddb59af0-6d04-11e5-ba46-22000b92c6ec
 
 # Bookmark IDs instead of endpoints
 endpoint_gl_homedir=b0569b9c-2558-11ec-a0a7-6b21ca6daf73
 endpoint_kdiba_lab_turbo=8ce139f8-9d46-11ed-a2a2-8383522b48d9
 
-endpoint_gl_homedir=e0370902-9f48-11e9-821b-02b7a92d8e58
-endpoint_kdiba_lab_turbo=8c185a84-5c61-4bbc-b12b-11430e20010f
+globus_endpoint_gl_homedir=e0370902-9f48-11e9-821b-02b7a92d8e58
+globus_endpoint_kdiba_lab_turbo=8c185a84-5c61-4bbc-b12b-11430e20010f
+globus_endpoint_pho_personal_laptop=20c84240-1eb1-11eb-81b7-0e2f230cc907
 
 
+
+# List outputs
+globus ls "${globus_endpoint_pho_personal_laptop}":/
+globus ls "${globus_endpoint_pho_personal_laptop}":/Volumes/PegasusR6/Data/KDIBA
+
+
+<!-- globus ls "${globus_endpoint_pho_personal_laptop_pegasusR6}":/ -->
+
+# Transfering
 % globus transfer --label "CLI Batch" --sync-level mtime --include "*.replay_info.mat" --source-endpoint "${endpoint_kdiba_lab_turbo}" --destination-endpoint "${endpoint_gl_homedir}" /Data/KDIBA/ /cloud/GDrive_Diba_Shared/Data/KDIBA/ --recursive 
 globus transfer --label "CLI Batch" --sync-level mtime --include "*.replay_info.mat" "${endpoint_kdiba_lab_turbo}":/umms-dibalab/Data/KDIBA/ "${endpoint_gl_homedir}":/~/cloud/GDrive_Diba_Shared/Data/KDIBA/ --recursive 
 
 
 
-globus transfer --label "Timer GDriveMount2DataDenData, run 1" --sync-level 0 --verify-checksum --source-endpoint "u_upma7q3dzfeqzg454wkb7lyqe4" --destination-endpoint "u_gjz3ny5efnehvgt65z3lxdqd74" /path/to/source/dir/ /path/to/destination/dir/
+## WORKING TRANSFER 2023-04-28:
+globus transfer --label "CLI Batch Personal" --sync-level mtime --include "*.replay_info.mat" "${globus_endpoint_kdiba_lab_turbo}":/umms-kdiba/Data/KDIBA/ "${globus_endpoint_pho_personal_laptop}":/Volumes/PegasusR6/Data/KDIBA/ --recursive 
+
+
+globus transfer --label "CLI Batch Personal" --sync-level mtime --include "*.replay_info.mat" "${globus_endpoint_kdiba_lab_turbo}":/umms-kdiba/Data/KDIBA/ "${globus_endpoint_pho_personal_laptop}":/Volumes/PegasusR6/Data/KDIBA/ --recursive 
+
+
+"*.{xml,mat,pkl,npy,h5,eeg,dat}"
 
 
 
-globus transfer --label "Timer GDriveMount2DataDenData, run 1" --sync-level 0 --verify-checksum --source-endpoint "u_upma7q3dzfeqzg454wkb7lyqe4" --destination-endpoint "u_gjz3ny5efnehvgt65z3lxdqd74" /path/to/source/dir/ /path/to/destination/dir/
 
 
+# Task Listing/Showing:
 globus task show 92ae610e-b3bb-11ed-ae06-bfc1a406350a --successful-transfers --format json
-
-
 globus task show 6db8af9a-bd7e-11ed-9c4d-2f882bacb908 --successful-transfers --format json
-
 globus task show 6db8af9a-bd7e-11ed-9c4d-2f882bacb908 --skipped-errors --format json
 ```json
 {
@@ -177,3 +191,5 @@ globus task show 6db8af9a-bd7e-11ed-9c4d-2f882bacb908 --skipped-errors --format 
 "/home/halechr/cloud/GDrive_Diba_Shared/Hiro/"
 "/umms-dibalab/Data/Laurel/"
 
+
+# globus transfer --label "CLI Batch" --sync-level mtime --include "*.replay_info.mat" "${endpoint_kdiba_lab_turbo}":/umms-dibalab/Data/KDIBA/ "${endpoint_gl_homedir}":/~/cloud/GDrive_Diba_Shared/Data/KDIBA/ --recursive
