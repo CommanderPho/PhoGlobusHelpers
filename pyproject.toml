@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "phoglobushelpers"
-version = "0.1.0"
+version = "0.1.1"
 description = "A series of helpers to help the lab with Globus Endpoint related tasks"
 authors = ["Pho Hale <PhoHale@gmail.com>"]
 readme = "README.md"
@@ -12,6 +12,9 @@ globus-cli = "^3.13.0"
 pathlib = "^1.0.1"
 wheel = "^0.38.4"
 ipython = "^8.11.0"
+fair-research-login = "^0.3.0"
+ipykernel = "^6.23.1"
+pandas = "^2.0.2"
 
 [tool.poetry.group.dev.dependencies]
 setuptools = "^67.6.0"

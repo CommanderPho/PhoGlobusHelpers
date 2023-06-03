@@ -1,0 +1,259 @@
+# Globus Automation Examples
+Simple code examples for various use cases using Globus.
+
+## Overview
+
+There are three example use cases in this repo:
+
+* Syncing a directory.
+* Staging data in a shared directory.
+* Removing directories after files are transferred .
+
+The syncing and staging examples are implemented as both a Bash
+script that calls the [Globus CLI](https://docs.globus.org/cli/) and 
+a Python module that can be run as a script or imported as a module. 
+The directory cleanup example is implemented as a Python script. 
+The Python examples are built using the 
+[Globus SDK](https://globus-sdk-python.readthedocs.io/en/stable/).
+
+* [`cli-sync.sh`](cli-sync.sh): submit a recursive transfer with sync option.
+* [`globus_folder_sync.py`](globus_folder_sync.py): submit a recursive transfer with sync option; uses a [Native App grant](https://github.com/globus/native-app-examples).
+* [`share-data.sh`](share-data.sh): stages data to a folder and sets sharing access control to a user and or group.
+* [`share_data.py`](share_data.py): stages data to a folder and sets sharing access control to a user and or group. Uses a [Native App grant](https://github.com/globus/native-app-examples) or [Client Credential grant](http://globus-sdk-python.readthedocs.io/en/stable/examples/client_credentials/).
+* [`cleanup_cache.py`](cleanup_cache.py): removes directories under a shared endpoint that have had data transferred from them. Uses [Client Credential grant](http://globus-sdk-python.readthedocs.io/en/stable/examples/client_credentials/).
+* [Globus CLI Batch Transfer Recipe](batch.md): a guide on how to use the Globus CLI to list, filter, and batch submit a transfer from two locations into a single destination folder.
+
+## Getting Started
+* Install the [Globus Command Line Interface (CLI)](https://docs.globus.org/cli/installation/).
+* Set up your environment.
+    * [OS X](#os-x)
+    * [Linux](#linux-ubuntu)
+    * [Windows](#windows)
+* Create your own Native App registration for use with the examples. Visit the [Globus Developer Pages](https://developers.globus.org) to register an App.
+    * When registering the App you'll be asked for some information, including the redirect URL and any scopes you will be requesting.
+        * Check the "Will be used by a native application" checkbox
+        * Redirect URL: `https://auth.globus.org/v2/web/auth-code`
+        * Scopes: `urn:globus:auth:scope:transfer.api.globus.org:all`, `openid`, `profile`, `email`
+* Replace the UUIDs for `CLIENT_ID` in [`globus_folder_sync.py`](globus_folder_sync.py) and [`share_data.py`](share_data.py).
+* If you prefer to run `share_data.py` as a Confidential App, visit the [Globus Developer Pages](https://developers.globus.org) to register an App.
+    * Leave "Will be used by a native application" checkbox unchecked.
+    * When your app is registerred, scroll down to "Client Secrets" and click "Generate New Client Secret". Copy a generated client secret into `share-data.py` as `CLIENT_SECRET`.
+
+
+# Creditions:
+PhoThickGlobusAutomation
+https://auth.globus.org/v2/web/auth-code
+769d24e1-d1cc-4198-9ff7-2626485da449
+769d24e1-d1cc-4198-9ff7-2626485da449@clients.auth.globus.org
+
+
+### OS X
+
+##### Environment Setup
+
+* `sudo easy_install pip`
+* `sudo pip install virtualenv`
+* `git clone https://github.com/globus/automation-examples`
+* `cd automation-examples`
+* `virtualenv venv`
+* `source venv/bin/activate`
+* `pip install -r requirements.txt`
+
+### Linux (Ubuntu)
+
+##### Environment Setup
+
+* `sudo apt-get update`
+* `sudo apt-get install python-pip`
+* `sudo pip install virtualenv`
+* `sudo apt-get install git`
+* `git clone https://github.com/globus/automation-examples`
+* `cd automation-examples`
+* `virtualenv venv`
+* `source venv/bin/activate`
+* `pip install -r requirements.txt`
+
+### Windows
+
+##### Environment Setup
+
+* Install Python (<https://www.python.org/downloads/windows/>)
+* `pip install virtualenv`
+* Install git (<https://git-scm.com/downloads>)
+* `git clone https://github.com/globus/automation-examples`
+* `cd automation-examples`
+* `virtualenv venv`
+* `venv\Scripts\activate`
+* `pip install -r requirements.txt`
+
+## Running the scripts
+
+### globus_folder_sync.py and cli-sync.sh
+
+The app transfers the `/share/godata/` directory from Tutorial Endpoint 1 to
+`/~/sync-demo/` on Tutorial Endpoint 2. The destination path must exist
+before the script is executed. The path can also be changed by specifying
+a different value of `DESTINATION_PATH` in `globus_folder_sync.py`.
+The Python script launches a web browser to get an OAuth authorization code.
+After you consent and copy the code to the 'Enter the auth code' prompt,
+the script requests access and refresh tokens from the Globus Auth service and
+saves the tokens in the `transfer-data.json` file to avoid going through the OAuth
+flow every time the script is executed.
+
+```
+$ ./globus_folder_sync.py 
+Transfer has been started from
+  ddb59aef-6d04-11e5-ba46-22000b92c6ec:/share/godata/
+to
+  ddb59af0-6d04-11e5-ba46-22000b92c6ec:/~/sync-demo/
+Visit the link below to see the changes:
+https://globus.org/app/transfer?destination_path=%2F%7E%2Fsync-demo%2F&origin_path=%2Fshare%2Fgodata%2F&destination_id=ddb59af0-6d04-11e5-ba46-22000b92c6ec&origin_id=ddb59aef-6d04-11e5-ba46-22000b92c6ec
+```
+The same functionality can be implemented using the Globus CLI. In this case,
+the Globus CLI is responsible for the OAuth 2.0 authorization flow and handling
+access and refresh tokens. The example shell script, `cli-sync.sh`, calls
+the Globus CLI `transfer` command only. To avoid transferring the same data
+concurrently, the script stores a transfer task id in the `last-transfer-id.txt`
+file and checks this file on every execution to avoid starting a new transfer before the previous task has finished.
+```
+$ globus login
+$ ./cli-sync.sh 
+Checking for a previous transfer
+Last transfer fb55533e-449f-11e7-bd46-22000b9a448b SUCCEEDED, continuing
+Verified that source is a directory
+Submitted sync from ddb59aef-6d04-11e5-ba46-22000b92c6ec:/share/godata/ to ddb59af0-6d04-11e5-ba46-22000b92c6ec:/~/sync-demo/
+Link:
+https://www.globus.org/app/transfer?origin_id=ddb59aef-6d04-11e5-ba46-22000b92c6ec&origin_path=%2Fshare%2Fgodata%2F&destination_id=ddb59af0-6d04-11e5-ba46-22000b92c6ec&destination_path=%2F~%2Fsync-demo%2F
+Saving sync transfer ID to last-transfer-id.txt
+$ cat last-transfer-id.txt
+842ac3d8-39b5-11e7-bcec-22000b9a448b
+```
+
+**Note**: Both ./globus_folder_sync.py and cli-sync.sh require you to login (see Login section for help).
+
+### share_data.py and share-data.sh
+
+
+The app transfers a directory to a shared endpoint and destination path
+specified in the command line. The destination path must exist prior to running the script. Before the script starts transferring files it checks if the
+destination path concatenated with the last section of the source path exists. If
+it does and the `--delete` option is specified, the script deletes the path with
+all subdirectories and files, creates it again and grants a specified user or
+group read access.
+
+**Note**: Before running this:
+ * Create a shared endpoint and specify its UUID in the variable `$shared_ep`
+ in the exmamples below.
+ * Create a folder named `share-data-demo/` under the shared endpoint.
+
+In the example below, the script transfers `/share/godata/` from Tutorial
+Endpoint 1 to `/share-data-demo/` on a shared endpoint created against Tutorial
+Endpoint 2. If you run this multiple times, you may see an error that the ACL rule
+already exists. You can ignore it.
+```
+$ source_ep=ddb59aef-6d04-11e5-ba46-22000b92c6ec # Tutorial Endpoint 1
+$ shared_ep='' # Shared endpoint on Tutorial Endpoint 2
+$ user_uuid=c02d881a-d274-11e5-bdf5-d3a88fb071ca # John Doe
+$ ./share_data.py \
+    --source-endpoint $source_ep \
+    --shared-endpoint $shared_ep \
+    --source-path /share/godata/ \
+    --destination-path /share-data-demo/ \
+    --user-uuid $user_uuid \
+    --delete
+Destination directory, /share-data-demo/godata/, exists and will be deleted
+Submitting a delete task
+	task_id: 3d68afa2-3943-11e9-9fa6-0a06afd4a22e
+Creating destination directory /share-data-demo/godata/
+Granting user, 78af45b1-d0b4-4311-8475-b3681d37c4d5, read access to the destination directory
+Submitting a transfer task
+	task_id: 4409c314-3943-11e9-9fa6-0a06afd4a22e
+You can monitor the transfer task programmatically using Globus SDK, or go to the Web UI, https://www.globus.org/app/activity/4409c314-3943-11e9-9fa6-0a06afd4a22e.    
+```
+`share-data.sh` script shows how to implement the same functionality using the Globus CLI.
+```
+$ globus login
+$ source_ep=ddb59aef-6d04-11e5-ba46-22000b92c6ec # Tutorial Endpoint 1
+$ shared_ep='' # Shared endpoint on Tutorial Endpoint 2
+$ user_uuid=c02d881a-d274-11e5-bdf5-d3a88fb071ca # John Doe
+$ ./share-data.sh \
+    --source-endpoint $source_ep \
+    --shared-endpoint $shared_ep \
+    --source-path /share/godata/ \
+    --destination-path /share-data-demo/ \
+    --user-uuid $user_uuid \
+    --delete
+Destination directory, /share-data-demo/godata/, exists and will be deleted
+The directory was created successfully
+Message: The transfer has been accepted and a task has been created and queued for execution
+Task ID: 60b80d23-39c2-11e7-bcec-22000b9a448b
+```
+
+**Note**: Both share_data.py and share-data.sh require you to login (see Login section for help).
+
+### cleanup_cache.py
+
+There are a few things that are necessary to set up in order to successfully run [`cleanup_cache.py`](cleanup_cache.py).
+
+* You must have registered a ClientID and generated a secret for it at [Globus Developer Pages](https://developers.globus.org).  Since this script uses a Client Credential Grant, embedding the client secret in the script, you should not use this ClientID for any other purposes. When creating the app use the following:
+    * "Redirect URLs" -- Set to `https://example.com/oauth_callback/`.
+    * Scopes: `[urn:globus:auth:scope:transfer.api.globus.org:all]`
+        Only transfer is required, since your bot will be using client_secret
+        to authenticate. `[openid profile]` are required if you setup your own
+        three-legged-auth server and want to allow users to login to it.
+    * Leave "Native App" unchecked.
+* The ClientID and secret that you obtained above should be placed in the `cleanup_cache.py` script, in place of the development values.
+* There must be a shared endpoint, the transfers from which you wish to monitor and clean up.
+* The Client Identity Username (typically the Client ID with "@clients.auth.globus.org appended) must be authorized as an Administrator and Activity Monitor of your shared endpoint. You can set these at `https://www.globus.org/app/endpoints/<UUID of shared endpoint>/roles`.
+* You must put the UUID of the shared endpoint you wish to clean up in the `cleanup_cache.py` script.
+
+The `cleanup_cache.py` script will do the following:
+
+* Search for successful transfers from your shared endpoint within the last 24 hours.
+* For any successful transfers found, determine if the files transferred were in a common directory, if so, submit a recursive delete request on that directory, if not, submit a delete request for each file from the transfer.
+* Determine if the common directory from the transfer had any specific ACLs set on the endpoint, if so, delete them.
+
+Note: `cleanup_cache.py` will find the most specific common directory for all files copied in a transfer.  Thus, if all the files transferred were in `/maindir/subdir`, it will attempt to recursively delete `/maindir/subdir`, not `/maindir`.
+
+Another Note: This script is greedy in how it deletes folders. If someone cherry-picks files, it will still delete the whole directory!
+
+### Login
+
+Some of the scripts require you to login to Globus to ensure that you are an authorized user. The scripts use refresh tokens to save you the trouble of needing to login every time a script is run. For example, if you login when running a script and then run either the same script or a different one, you will not need to login a second time. 
+
+## Blocking on Transfer Tasks
+
+Sometimes you'll want to block on the submitted transfer before
+proceeding onto the next part of your script or workflow. You can do
+this with the `globus task wait` command from the
+[Globus CLI](https://docs.globus.org/cli/). This command also allows
+you to specify the return code from a timeout window to determine if
+the CLI is exiting because the task has failed or is still progressing.
+
+### Examples
+
+Default value for exceeding the timeout window
+```
+$ globus task wait -H --timeout 35 --polling-interval 10 c1002af0-444e-11e9-bf28-0edbf3a4e7ee
+....
+Task has yet to complete after 35 seconds
+$ echo $?
+1
+```
+
+Setting a custom exit code of `0`
+```
+$ globus task wait -H --timeout 35 --polling-interval 10 --timeout-exit-code 0 c1002af0-444e-11e9-bf28-0edbf3a4e7ee
+....
+Task has yet to complete after 35 seconds
+$ echo $?
+0
+```
+
+Cancelled task
+```
+$ globus task wait -H --timeout 60 --polling-interval 5 c1002af0-444e-11e9-bf28-0edbf3a4e7ee
+..
+$ echo $?
+1
+```
