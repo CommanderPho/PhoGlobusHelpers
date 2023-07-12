@@ -6,7 +6,7 @@ authors = ["Pho Hale <PhoHale@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9,<3.12"
 globus-sdk = "^3.16.0"
 globus-cli = "^3.13.0"
 pathlib = "^1.0.1"
@@ -14,7 +14,9 @@ wheel = "^0.38.4"
 ipython = "^8.11.0"
 fair-research-login = "^0.3.0"
 ipykernel = "^6.23.1"
-pandas = "^2.0.2"
+pandas = "^1.5.1"
+pyphocorehelpers = {path = "../pyPhoCoreHelpers", develop=true}
+# neuropy = {path = "../NeuroPy", develop=true}
 
 [tool.poetry.group.dev.dependencies]
 setuptools = "^67.6.0"
