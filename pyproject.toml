@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "phoglobushelpers"
-version = "0.1.2"
+version = "0.2.0"
 description = "A series of helpers to help the lab with Globus Endpoint related tasks"
 authors = ["Pho Hale <PhoHale@gmail.com>"]
 readme = "README.md"
@@ -17,6 +17,7 @@ ipykernel = "^6.23.1"
 pandas = "^1.5.1"
 pyphocorehelpers = {path = "../pyPhoCoreHelpers", develop=true}
 # neuropy = {path = "../NeuroPy", develop=true}
+attrs = "^23.1.0"
 
 [tool.poetry.group.dev.dependencies]
 setuptools = "^67.6.0"
