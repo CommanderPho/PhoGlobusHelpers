@@ -1,4 +1,5 @@
 import datetime
+from typing import Any
 import pandas as pd
 import globus_sdk
 from globus_sdk import AccessTokenAuthorizer, TransferClient
@@ -27,7 +28,10 @@ class GlobusConnector:
 
     # Define the Globus transfer client and authenticate with a user's tokens
     auth_client = globus_sdk.NativeAppAuthClient('769d24e1-d1cc-4198-9ff7-2626485da449')
-    transfer_client: TransferClient = field(init=False)
+
+    # authorizer = field(init=False, default=None)
+    transfer_client: TransferClient = field() #, default=None) # TransferClient
+
 
     @classmethod
     def login_and_get_transfer_client(cls, *, scopes='openid profile email urn:globus:auth:scope:transfer.api.globus.org:all', copy_to_clipboard=True):
@@ -72,4 +76,67 @@ class GlobusConnector:
             print("[{}] {}".format(ep["id"], ep["display_name"]))
 
 
+    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List, filelist_dest:List, max_single_file_wait_time_seconds=3*60*60):
+        """ performs a batch transfer for the files specified in the filelists from source to endpoint.
+        # Set your source and destination endpoint IDs
+        # source_endpoint = "SOURCE_ENDPOINT_ID"
+        # destination_endpoint = "DESTINATION_ENDPOINT_ID"
+        # # Define the list of source and destination files
+        # filelist_source = [
+        #     "/path/to/source/file1.txt",
+        #     "/path/to/source/file2.txt",
+        #     "/path/to/source/file3.txt"
+        # ]
 
+        # filelist_dest = [
+        #     "/path/to/destination/file1.txt",
+        #     "/path/to/destination/file2.txt",
+        #     "/path/to/destination/file3.txt"
+        # ]
+
+
+        Usage:
+
+            batch_transfer_files(transfer_client, source_endpoint=endpoint_LNX00052_Fedora, destination_endpoint=endpoint_LNX00052_Fedora, filelist_source:List, filelist_dest:List, max_single_file_wait_time_seconds=3*60*60)
+
+        """
+        transfer_client: TransferClient = self.transfer_client
+
+        # Set your transfer options
+        transfer_options = {
+            "preserve_timestamp": True
+        }
+
+        # Turn them all into strings
+        filelist_source = [str(path) for path in filelist_source]
+        filelist_dest = [str(path) for path in filelist_dest]
+
+        # Verify that the source and destination lists have the same length
+        assert len(filelist_source) == len(filelist_dest), "Error: Source and destination file lists must have the same length."
+
+        # Loop through the file lists and initiate the transfers
+        for source_path, destination_path in zip(filelist_source, filelist_dest):
+            # Create a TransferData object
+            transfer_data = TransferData(
+                transfer_client,
+                source_endpoint,
+                destination_endpoint,
+                label="Batch File Transfer",
+                sync_level="checksum",
+                **transfer_options
+            )
+
+            # Add the file transfer to the TransferData object
+            transfer_data.add_item(source_path, destination_path)
+
+            # Initiate the transfer
+            transfer_result = transfer_client.submit_transfer(transfer_data)
+
+            print(f"Transferring {source_path} to {destination_path}...")
+
+            # Wait for the transfer to complete
+            transfer_client.task_wait(transfer_result["task_id"], timeout=max_single_file_wait_time_seconds, polling_interval=10)
+
+        print("All transfers completed successfully.")
+
+    

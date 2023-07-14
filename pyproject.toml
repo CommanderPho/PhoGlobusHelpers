@@ -4,6 +4,9 @@ version = "0.2.0"
 description = "A series of helpers to help the lab with Globus Endpoint related tasks"
 authors = ["Pho Hale <PhoHale@gmail.com>"]
 readme = "README.md"
+packages = [
+    { include = "phoglobushelpers", from = "src" },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.12"
