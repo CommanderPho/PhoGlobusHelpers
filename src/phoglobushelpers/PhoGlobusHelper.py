@@ -1,16 +1,19 @@
-import datetime
-from typing import Any
+from datetime import datetime
+from typing import Any, List, Optional, Dict
 import pandas as pd
 import globus_sdk
-from globus_sdk import AccessTokenAuthorizer, TransferClient
+from globus_sdk import AccessTokenAuthorizer, TransferClient, TransferData
 from globus_sdk.scopes import TransferScopes
 from attrs import define, field, Factory
+
+from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
 
 class KnownEndpoints:
     globus_endpoint_gl_homedir:str='e0370902-9f48-11e9-821b-02b7a92d8e58'
     globus_endpoint_kdiba_lab_turbo:str='8c185a84-5c61-4bbc-b12b-11430e20010f'
     endpoint_LNX00052_Fedora:str = 'af3fcfce-f664-11ed-9a7d-83ef71fbf0ae'
-    endpoint_Apogee:str = '84991054-07b4-11ed-8d83-a54cf61939f8'
+    endpoint_Apogee:str = '84991054-07b4-11ed-8d83-a54cf61939f8' # Pho's personal computer
+    
 
 @define(slots=False, repr=False)
 class GlobusConnector:
@@ -76,6 +79,24 @@ class GlobusConnector:
             print("[{}] {}".format(ep["id"], ep["display_name"]))
 
 
+    def get_bookmarks(self) -> BookmarkList: # List[Bookmark]
+        """ returns a BookmarkList object, containing """
+        transfer_client: TransferClient = self.transfer_client
+        response_dict = transfer_client.bookmark_list()
+        # Initialize the BookmarkList object
+        bookmark_list = BookmarkList(
+            DATA_TYPE=response_dict['DATA_TYPE'],
+            DATA=[Bookmark(
+                bookmark_id=item['id'],
+                name=item['name'],
+                endpoint_id=item['endpoint_id'],
+                path=item['path']
+            ) for item in response_dict['DATA']]
+        )
+        # bookmark_list: List[Bookmark] = [Bookmark(bookmark_id=item['id'], name=item['name'], endpoint_id=item['endpoint_id'], path=item['path'] ) for item in response_dict['DATA']]
+        return bookmark_list
+
+
     def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List, filelist_dest:List, max_single_file_wait_time_seconds=3*60*60):
         """ performs a batch transfer for the files specified in the filelists from source to endpoint.
         # Set your source and destination endpoint IDs
@@ -139,4 +160,74 @@ class GlobusConnector:
 
         print("All transfers completed successfully.")
 
+
+    def list_files(self, endpoint:str, path:str, start_date=None, end_date=None):
+        transfer_client: TransferClient = self.transfer_client
+        
+        # from bookmark
+        # endpoint = target_bookmark.endpoint_id # '728fb3e8-2597-11ee-80c2-a3018385fcef'
+        # path = target_bookmark.path
+
+        start_date = start_date or "" # like "2023-07-01"
+        end_date = end_date or "" # like "2021-01-01"
+
+        filter_kwargs_dict = {}
+        if start_date != "" or end_date != "":
+            filter_kwargs_dict["last_modified"] = [start_date, end_date]
+        
+        response_dict = transfer_client.operation_ls(
+            endpoint,
+            path=path,
+            orderby=["type", "name"],
+            filter=filter_kwargs_dict,
+        )
+
+        print(response_dict)
+        # for entry in response_dict:
+        #     print(entry["name"], entry["type"])
+        return response_dict
     
+
+    def list_files_filtered_by_modified_time(self, source_endpoint: str, start_time: Optional[str] = None):
+        """
+        Lists the files on the source endpoint and filters them based on the modified timestamp.
+
+        Args:
+            source_endpoint (str): The ID of the source endpoint.
+            start_time (str): The start time for the filter in the format 'YYYY-MM-DDTHH:MM:SSZ'.
+            access_token (str): The Globus access token.
+
+        Example:
+            connect_man = GlobusConnector.login_and_get_transfer_client()
+            transfer_client = connect_man.transfer_client
+            connect_man.list_files_filtered_by_modified_time(source_endpoint='8c185a84-5c61-4bbc-b12b-11430e20010f',
+                                                            start_time='2023-05-31T00:00:00Z',
+                                                            access_token='769d24e1-d1cc-4198-9ff7-2626485da449')
+        """
+        # Set today's date as the default start time if not provided
+        if not start_time:
+            start_time = datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
+            
+        transfer_client = self.transfer_client
+
+        # Create a TransferData object
+        # transfer_data = TransferData(transfer_client, source_endpoint, None) # this is never used?
+
+        # Set the filter options for modified timestamp
+        filter_options = {
+            "time_modified": start_time
+        }
+
+        # Initiate the file listing with filter options
+        task_id = transfer_client.endpoint_manager_task_submit(source_endpoint, filter_options=filter_options)
+
+        # Wait for the task to complete
+        transfer_client.task_wait(task_id)
+
+        # Get the task details
+        task = transfer_client.task_wait(task_id)
+        files = task["files"]
+
+        # Print the list of files
+        for file in files:
+            print(file["path"])
