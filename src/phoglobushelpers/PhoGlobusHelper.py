@@ -8,6 +8,8 @@ from attrs import define, field, Factory
 
 from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
 from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList
+from phoglobushelpers.compatibility_objects.Tasks import FatalError, Task, TaskList
+
 
 class KnownEndpoints:
     globus_endpoint_gl_homedir:str='e0370902-9f48-11e9-821b-02b7a92d8e58'
@@ -98,6 +100,26 @@ class GlobusConnector:
         return bookmark_list
 
 
+    def get_tasks(self) -> TaskList:
+        """
+        tasks_list = connect_man.get_tasks()
+        tasks_list.to_dataframe()
+
+        """
+        transfer_client: TransferClient = self.transfer_client
+        response_dict = transfer_client.task_list()
+        # Initialize the TaskList object
+        tasks_list = TaskList(
+            DATA_TYPE=response_dict['DATA_TYPE'],
+            DATA=[Task(**item) for item in response_dict['DATA']],
+            length=response_dict['length'],
+            limit=response_dict['limit'],
+            offset=response_dict['offset'],
+            total=response_dict['total']
+        )
+        return tasks_list
+
+
     def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List, filelist_dest:List, max_single_file_wait_time_seconds=3*60*60):
         """ performs a batch transfer for the files specified in the filelists from source to endpoint.
         # Set your source and destination endpoint IDs
@@ -163,12 +185,15 @@ class GlobusConnector:
 
 
     def list_files(self, endpoint:str, path:str, start_date=None, end_date=None) -> FileList:
-        transfer_client: TransferClient = self.transfer_client
+        """ 
         
         # from bookmark
         # endpoint = target_bookmark.endpoint_id # '728fb3e8-2597-11ee-80c2-a3018385fcef'
         # path = target_bookmark.path
-
+        
+        """
+        transfer_client: TransferClient = self.transfer_client
+        
         start_date = start_date or "" # like "2023-07-01"
         end_date = end_date or "" # like "2021-01-01"
 
