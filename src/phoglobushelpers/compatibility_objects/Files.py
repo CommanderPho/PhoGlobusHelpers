@@ -1,8 +1,35 @@
-from typing import List
+from typing import List, Dict, Optional, Any
 from attrs import define, field, Factory
 from enum import Enum
+import pandas as pd
 
 
+""" 
+
+# Initialize the FileList object
+file_list = FileList(
+	DATA_TYPE=response_dict['DATA_TYPE'],
+	DATA=[File(
+		group=item['group'],
+        last_modified=item['last_modified'],
+        link_group=item['link_group'], link_last_modified=item['link_last_modified'], link_size=item['link_size'], link_target=item['link_target'], link_user=item['link_user'],
+		name=item['name'],
+		permissions=item['permissions'],
+        size=item['size'],
+		type=FilesystemDataType(item['type']),
+        user=item['user']
+	) for item in response_dict['DATA']],
+    absolute_path=response_dict['absolute_path'],
+    endpoint=response_dict['endpoint'],
+    length=response_dict['length'],
+    path=response_dict['path'],
+    rename_supported=response_dict['rename_supported'],
+    symlink_supported=response_dict['symlink_supported'],
+    total=response_dict['total'],
+)
+file_list
+
+"""
 class FilesystemDataType(Enum):
 	"""Docstring for FilesystemDataType."""
 	DIRECTORY = "dir"
@@ -28,18 +55,18 @@ class File:
       "user": "halechr"
     },
     """
-    DATA_TYPE: str
+    # DATA_TYPE: str # ignores DATA_TYPE
     group: str
     last_modified: str
-    link_group: str
-    link_last_modified: str
-    link_size: str
-    link_target: str
-    link_user: str
+    link_group: Optional[str]
+    link_last_modified: Optional[str]
+    link_size: Optional[str]
+    link_target: Optional[str]
+    link_user: Optional[str]
     name: str
     permissions: str
     size: int
-    type: str
+    type: FilesystemDataType
     user: str
 
 @define(slots=False)
@@ -86,3 +113,35 @@ class FileList:
     total: int
     
 
+    def to_dataframe(self) -> pd.DataFrame:
+      data_dict = {
+          "group": [],
+          "last_modified": [],
+          "link_group": [],
+          "link_last_modified": [],
+          "link_size": [],
+          "link_target": [],
+          "link_user": [],
+          "name": [],
+          "permissions": [],
+          "size": [],
+          "type": [],
+          "user": []
+      }
+
+      for file in self.DATA:
+          data_dict["group"].append(file.group)
+          data_dict["last_modified"].append(file.last_modified)
+          data_dict["link_group"].append(file.link_group)
+          data_dict["link_last_modified"].append(file.link_last_modified)
+          data_dict["link_size"].append(file.link_size)
+          data_dict["link_target"].append(file.link_target)
+          data_dict["link_user"].append(file.link_user)
+          data_dict["name"].append(file.name)
+          data_dict["permissions"].append(file.permissions)
+          data_dict["size"].append(file.size)
+          data_dict["type"].append(file.type.value)
+          data_dict["user"].append(file.user)
+
+      df = pd.DataFrame(data_dict)
+      return df

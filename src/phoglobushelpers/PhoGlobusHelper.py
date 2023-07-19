@@ -7,6 +7,7 @@ from globus_sdk.scopes import TransferScopes
 from attrs import define, field, Factory
 
 from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
+from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList
 
 class KnownEndpoints:
     globus_endpoint_gl_homedir:str='e0370902-9f48-11e9-821b-02b7a92d8e58'
@@ -161,7 +162,7 @@ class GlobusConnector:
         print("All transfers completed successfully.")
 
 
-    def list_files(self, endpoint:str, path:str, start_date=None, end_date=None):
+    def list_files(self, endpoint:str, path:str, start_date=None, end_date=None) -> FileList:
         transfer_client: TransferClient = self.transfer_client
         
         # from bookmark
@@ -181,53 +182,28 @@ class GlobusConnector:
             orderby=["type", "name"],
             filter=filter_kwargs_dict,
         )
-
-        print(response_dict)
-        # for entry in response_dict:
-        #     print(entry["name"], entry["type"])
-        return response_dict
+        # Initialize the FileList object
+        file_list = FileList(
+            DATA_TYPE=response_dict['DATA_TYPE'],
+            DATA=[File(
+                group=item['group'],
+                last_modified=item['last_modified'],
+                link_group=item['link_group'], link_last_modified=item['link_last_modified'], link_size=item['link_size'], link_target=item['link_target'], link_user=item['link_user'],
+                name=item['name'],
+                permissions=item['permissions'],
+                size=item['size'],
+                type=FilesystemDataType(item['type']),
+                user=item['user']
+            ) for item in response_dict['DATA']],
+            absolute_path=response_dict['absolute_path'],
+            endpoint=response_dict['endpoint'],
+            length=response_dict['length'],
+            path=response_dict['path'],
+            rename_supported=response_dict['rename_supported'],
+            symlink_supported=response_dict['symlink_supported'],
+            total=response_dict['total'],
+        )
+        return file_list
     
 
-    def list_files_filtered_by_modified_time(self, source_endpoint: str, start_time: Optional[str] = None):
-        """
-        Lists the files on the source endpoint and filters them based on the modified timestamp.
-
-        Args:
-            source_endpoint (str): The ID of the source endpoint.
-            start_time (str): The start time for the filter in the format 'YYYY-MM-DDTHH:MM:SSZ'.
-            access_token (str): The Globus access token.
-
-        Example:
-            connect_man = GlobusConnector.login_and_get_transfer_client()
-            transfer_client = connect_man.transfer_client
-            connect_man.list_files_filtered_by_modified_time(source_endpoint='8c185a84-5c61-4bbc-b12b-11430e20010f',
-                                                            start_time='2023-05-31T00:00:00Z',
-                                                            access_token='769d24e1-d1cc-4198-9ff7-2626485da449')
-        """
-        # Set today's date as the default start time if not provided
-        if not start_time:
-            start_time = datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
-            
-        transfer_client = self.transfer_client
-
-        # Create a TransferData object
-        # transfer_data = TransferData(transfer_client, source_endpoint, None) # this is never used?
-
-        # Set the filter options for modified timestamp
-        filter_options = {
-            "time_modified": start_time
-        }
-
-        # Initiate the file listing with filter options
-        task_id = transfer_client.endpoint_manager_task_submit(source_endpoint, filter_options=filter_options)
-
-        # Wait for the task to complete
-        transfer_client.task_wait(task_id)
-
-        # Get the task details
-        task = transfer_client.task_wait(task_id)
-        files = task["files"]
-
-        # Print the list of files
-        for file in files:
-            print(file["path"])
+    
