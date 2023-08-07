@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, List, Optional, Dict
+from globus_sdk.response import GlobusHTTPResponse
 import pandas as pd
 import globus_sdk
 from globus_sdk import AccessTokenAuthorizer, TransferClient, TransferData
@@ -232,5 +233,36 @@ class GlobusConnector:
         )
         return file_list
     
+    def list_files_recursively(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> FileList:
+        """
+        Recursively list files matching the given date range in the specified directory and its subdirectories.
+
+        :param endpoint: The Globus endpoint ID where the directory is located.
+        :param path: The path of the directory to search.
+        :param start_date: The start date for the search (e.g., "2023-07-01").
+        :param end_date: The end date for the search (e.g., "2021-01-01").
+        :return: A FileList object containing the files matching the date range.
+        """
+        file_list = self.list_files(endpoint, path, start_date, end_date)
+        matching_files = file_list.DATA
+
+        for file_item in file_list.DATA:
+            if file_item.type == FilesystemDataType('dir'):
+                subdirectory_path = f"{path}/{file_item.name}" if path != '/' else f"/{file_item.name}"
+                matching_files.extend(self.list_files_recursively(endpoint, subdirectory_path, start_date, end_date).DATA)
+
+        return FileList(
+            DATA_TYPE=file_list.DATA_TYPE,
+            DATA=matching_files,
+            absolute_path=file_list.absolute_path,
+            endpoint=file_list.endpoint,
+            length=file_list.length,
+            path=file_list.path,
+            rename_supported=file_list.rename_supported,
+            symlink_supported=file_list.symlink_supported,
+            total=file_list.total
+        )
+        
+
 
     
