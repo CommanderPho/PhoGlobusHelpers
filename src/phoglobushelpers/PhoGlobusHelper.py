@@ -10,7 +10,7 @@ from globus_sdk.scopes import TransferScopes
 from attrs import define, field, Factory
 
 from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
-from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList, recursive_ls
+from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList
 from phoglobushelpers.compatibility_objects.Tasks import FatalError, Task, TaskList
 
 
@@ -248,51 +248,6 @@ class GlobusConnector:
             return False
         return True
         
-
-
-    def official_list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False, max_depth: int = 3) -> FileList:
-        transfer_client: TransferClient = self.transfer_client
-
-        data_files = []
-        if should_list_recursively:
-            for item in recursive_ls(transfer_client, endpoint, path, max_depth=max_depth):
-                file_item = File(
-                    group=item['group'],
-                    last_modified=item['last_modified'],
-                    link_group=item['link_group'], link_last_modified=item['link_last_modified'], link_size=item['link_size'], link_target=item['link_target'], link_user=item['link_user'],
-                    name=item['name'],
-                    permissions=item['permissions'],
-                    size=item['size'],
-                    type=FilesystemDataType(item['type']),
-                    user=item['user'],
-                    parent_path=path # Or compute based on item['name']
-                )
-                if file_item.type == FilesystemDataType('file') and (not start_date and not end_date or self.file_within_date_range(file_item, start_date, end_date)):
-                    data_files.append(file_item)
-        else:
-            data_files = self.list_files(transfer_client, endpoint, path, start_date, end_date, should_list_recursively=False)
-
-        # Additional code to fetch absolute_path, endpoint, length, path, rename_supported, symlink_supported, total as needed
-        # ...
-        absolute_path = path
-        rename_supported = False
-        symlink_supported = False
-        total = 0
-
-        file_list = FileList(
-            DATA_TYPE="file_list",
-            DATA=data_files,
-            absolute_path=absolute_path,
-            endpoint=endpoint,
-            length=len(data_files),
-            path=path,
-            rename_supported=rename_supported,
-            symlink_supported=symlink_supported,
-            total=total,
-        )
-        return file_list
-
-
 
 
     
