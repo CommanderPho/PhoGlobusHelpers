@@ -68,6 +68,7 @@ class File:
     size: int
     type: FilesystemDataType
     user: str
+    parent_path: str
 
 @define(slots=False)
 class FileList:
@@ -114,34 +115,42 @@ class FileList:
     
 
     def to_dataframe(self) -> pd.DataFrame:
-      data_dict = {
-          "group": [],
-          "last_modified": [],
-          "link_group": [],
-          "link_last_modified": [],
-          "link_size": [],
-          "link_target": [],
-          "link_user": [],
-          "name": [],
-          "permissions": [],
-          "size": [],
-          "type": [],
-          "user": []
-      }
+        data_dict = {
+            "group": [],
+            "last_modified": [],
+            "link_group": [],
+            "link_last_modified": [],
+            "link_size": [],
+            "link_target": [],
+            "link_user": [],
+            "name": [],
+            "permissions": [],
+            "size": [],
+            "type": [],
+            "user": [],
+            "parent_path": []  # New field for parent path
+        }
 
-      for file in self.DATA:
-          data_dict["group"].append(file.group)
-          data_dict["last_modified"].append(file.last_modified)
-          data_dict["link_group"].append(file.link_group)
-          data_dict["link_last_modified"].append(file.link_last_modified)
-          data_dict["link_size"].append(file.link_size)
-          data_dict["link_target"].append(file.link_target)
-          data_dict["link_user"].append(file.link_user)
-          data_dict["name"].append(file.name)
-          data_dict["permissions"].append(file.permissions)
-          data_dict["size"].append(file.size)
-          data_dict["type"].append(file.type.value)
-          data_dict["user"].append(file.user)
+        for file in self.DATA:
+            data_dict["parent_path"].append(file.parent_path)  # Add parent path to the data
+            data_dict["name"].append(file.name)
+            data_dict["last_modified"].append(file.last_modified)
+            data_dict["link_group"].append(file.link_group)
+            data_dict["link_last_modified"].append(file.link_last_modified)
+            data_dict["link_size"].append(file.link_size)
+            data_dict["link_target"].append(file.link_target)
+            data_dict["link_user"].append(file.link_user)
+            data_dict["group"].append(file.group)
+            data_dict["permissions"].append(file.permissions)
+            data_dict["size"].append(file.size)
+            data_dict["type"].append(file.type.value)
+            data_dict["user"].append(file.user)
+            
 
-      df = pd.DataFrame(data_dict)
-      return df
+        df = pd.DataFrame(data_dict)
+        return df
+
+
+
+
+

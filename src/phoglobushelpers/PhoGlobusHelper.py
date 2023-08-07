@@ -221,7 +221,8 @@ class GlobusConnector:
                 permissions=item['permissions'],
                 size=item['size'],
                 type=FilesystemDataType(item['type']),
-                user=item['user']
+                user=item['user'],
+                parent_path=path
             ) for item in response_dict['DATA']],
             absolute_path=response_dict['absolute_path'],
             endpoint=response_dict['endpoint'],
@@ -233,24 +234,23 @@ class GlobusConnector:
         )
         return file_list
     
-    def list_files_recursively(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> FileList:
-        """
-        Recursively list files matching the given date range in the specified directory and its subdirectories.
 
-        :param endpoint: The Globus endpoint ID where the directory is located.
-        :param path: The path of the directory to search.
-        :param start_date: The start date for the search (e.g., "2023-07-01").
-        :param end_date: The end date for the search (e.g., "2021-01-01").
-        :return: A FileList object containing the files matching the date range.
+    def list_files_recursively(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> FileList:
+        """ Lists the files in the directory recurrsively  
+        
         """
-        file_list = self.list_files(endpoint, path)  # No date filter here
+        file_list = self.list_files(endpoint, path)
         matching_files = []
 
         for file_item in file_list.DATA:
+            # Construct the parent path for the current file or directory
+            parent_path = path
+
             if file_item.type == FilesystemDataType('dir'):
-                subdirectory_path = f"{path}/{file_item.name}" if path != '/' else f"/{file_item.name}"
-                matching_files.extend(self.list_files_recursively(endpoint, subdirectory_path, start_date, end_date).DATA)
+                matching_files.extend(self.list_files_recursively(endpoint, f"{parent_path}/{file_item.name}", start_date, end_date).DATA)
             elif file_item.type == FilesystemDataType('file') and self.file_within_date_range(file_item, start_date, end_date):
+                # Update the file item with the parent path
+                file_item.parent_path = parent_path
                 matching_files.append(file_item)
 
         return FileList(
