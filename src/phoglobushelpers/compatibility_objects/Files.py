@@ -147,5 +147,54 @@ class FileList:
 
 
 
+import time
+from collections import deque
+
+
+def _recursive_ls_helper(tc, ep, queue, max_depth, sleep_frequency, sleep_duration, ls_params, top_level_ls_params):
+    call_count = 0
+    while queue:
+        abs_path, rel_path, depth = queue.pop()
+        path_prefix = rel_path + "/" if rel_path else ""
+
+        use_params = ls_params
+        if call_count == 0:
+            use_params = {**ls_params, **top_level_ls_params}
+
+        res = tc.operation_ls(ep, path=abs_path, **use_params)
+
+        call_count += 1
+        if call_count % sleep_frequency == 0:
+            time.sleep(sleep_duration)
+
+        if depth < max_depth:
+            queue.extend(
+                (
+                    res["path"] + item["name"],
+                    path_prefix + item["name"],
+                    depth + 1,
+                )
+                for item in res["DATA"]
+                if item["type"] == "dir"
+            )
+        for item in res["DATA"]:
+            item["name"] = path_prefix + item["name"]
+            yield item
+
+
+def recursive_ls(tc, ep, path, max_depth=3, sleep_frequency=10, sleep_duration=0.5, ls_params=None, top_level_ls_params=None):
+    """ From https://globus-sdk-python.readthedocs.io/en/stable/examples/recursive_ls.html#adding-sleep
+    # tc: a TransferClient
+    # ep: an endpoint ID
+    # path: the path to list recursively
+    
+    from phoglobushelpers.compatibility_objects.Files import recursive_ls
+    
+    """
+    ls_params = ls_params or {}
+    top_level_ls_params = top_level_ls_params or {}
+    queue = deque()
+    queue.append((path, "", 0))
+    yield from _recursive_ls_helper(tc, ep, queue, max_depth, sleep_frequency, sleep_duration, ls_params, top_level_ls_params)
 
 
