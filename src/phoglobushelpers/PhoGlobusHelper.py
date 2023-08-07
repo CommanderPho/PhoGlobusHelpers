@@ -187,33 +187,18 @@ class GlobusConnector:
         print("All transfers completed successfully.")
 
 
-    def list_files(self, endpoint:str, path:str, start_date=None, end_date=None) -> FileList:
-        """ 
-        
-        # from bookmark
-        # endpoint = target_bookmark.endpoint_id # '728fb3e8-2597-11ee-80c2-a3018385fcef'
-        # path = target_bookmark.path
-        
-        """
+    def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False) -> FileList:
         transfer_client: TransferClient = self.transfer_client
-        
-        start_date = start_date or "" # like "2023-07-01"
-        end_date = end_date or "" # like "2021-01-01"
 
-        filter_kwargs_dict = {}
-        if start_date != "" or end_date != "":
-            filter_kwargs_dict["last_modified"] = [start_date, end_date]
-        
         response_dict = transfer_client.operation_ls(
             endpoint,
             path=path,
-            orderby=["type", "name"],
-            filter=filter_kwargs_dict,
+            orderby=["type", "name"]
         )
-        # Initialize the FileList object
-        file_list = FileList(
-            DATA_TYPE=response_dict['DATA_TYPE'],
-            DATA=[File(
+
+        data_files = []
+        for item in response_dict['DATA']:
+            file_item = File(
                 group=item['group'],
                 last_modified=item['last_modified'],
                 link_group=item['link_group'], link_last_modified=item['link_last_modified'], link_size=item['link_size'], link_target=item['link_target'], link_user=item['link_user'],
@@ -223,10 +208,21 @@ class GlobusConnector:
                 type=FilesystemDataType(item['type']),
                 user=item['user'],
                 parent_path=path
-            ) for item in response_dict['DATA']],
+            )
+
+            if file_item.type == FilesystemDataType('dir'):
+                if should_list_recursively:
+                    subdirectory_path = f"{path}/{file_item.name}" if path != '/' else f"/{file_item.name}"
+                    data_files.extend(self.list_files(endpoint, subdirectory_path, start_date, end_date, should_list_recursively).DATA)
+            elif file_item.type == FilesystemDataType('file') and (not start_date and not end_date or self.file_within_date_range(file_item, start_date, end_date)):
+                data_files.append(file_item)
+
+        file_list = FileList(
+            DATA_TYPE=response_dict['DATA_TYPE'],
+            DATA=data_files,
             absolute_path=response_dict['absolute_path'],
             endpoint=response_dict['endpoint'],
-            length=response_dict['length'],
+            length=len(data_files),
             path=response_dict['path'],
             rename_supported=response_dict['rename_supported'],
             symlink_supported=response_dict['symlink_supported'],
@@ -234,36 +230,6 @@ class GlobusConnector:
         )
         return file_list
     
-
-    def list_files_recursively(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> FileList:
-        """ Lists the files in the directory recurrsively  
-        
-        """
-        file_list = self.list_files(endpoint, path)
-        matching_files = []
-
-        for file_item in file_list.DATA:
-            # Construct the parent path for the current file or directory
-            parent_path = path
-
-            if file_item.type == FilesystemDataType('dir'):
-                matching_files.extend(self.list_files_recursively(endpoint, f"{parent_path}/{file_item.name}", start_date, end_date).DATA)
-            elif file_item.type == FilesystemDataType('file') and self.file_within_date_range(file_item, start_date, end_date):
-                # Update the file item with the parent path
-                file_item.parent_path = parent_path
-                matching_files.append(file_item)
-
-        return FileList(
-            DATA_TYPE=file_list.DATA_TYPE,
-            DATA=matching_files,
-            absolute_path=file_list.absolute_path,
-            endpoint=file_list.endpoint,
-            length=len(matching_files),
-            path=file_list.path,
-            rename_supported=file_list.rename_supported,
-            symlink_supported=file_list.symlink_supported,
-            total=file_list.total
-        )
 
     def file_within_date_range(self, file_item: File, start_date: Optional[str], end_date: Optional[str]) -> bool:
         """
