@@ -20,6 +20,7 @@ ipykernel = "^6.23.1"
 pandas = "^1.5.1"
 attrs = "^23.1.0"
 # pyphocorehelpers = {git = "https://github.com/CommanderPho/pyPhoCoreHelpers.git", tag = "project-with-optional-requirements"}
+globus-jupyterlab = "^1.0.0b10"
 
 [tool.poetry.group.dev.dependencies]
 setuptools = "^67.6.0"

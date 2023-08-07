@@ -20,12 +20,14 @@ class KnownEndpoints:
 
 @define(slots=False, repr=False)
 class GlobusConnector:
-    """ 
+    """ A wrapper that holds an active connection to Globus and allows object-oriented operations to fetch endpoints, bookmarks, files, and perform operations on them.
 
     See:
         https://globus-sdk-python.readthedocs.io/en/stable/examples/minimal_transfer_script/index.html#example-minimal-transfer
 
     Usage:
+    
+        from phoglobushelpers.PhoGlobusHelper import GlobusConnector, KnownEndpoints
         connect_man = GlobusConnector.login_and_get_transfer_client()
         transfer_client = connect_man.transfer_client
         connect_man.list_endpoints()
