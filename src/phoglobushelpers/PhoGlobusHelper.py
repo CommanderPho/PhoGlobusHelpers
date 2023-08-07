@@ -243,25 +243,43 @@ class GlobusConnector:
         :param end_date: The end date for the search (e.g., "2021-01-01").
         :return: A FileList object containing the files matching the date range.
         """
-        file_list = self.list_files(endpoint, path, start_date, end_date)
-        matching_files = file_list.DATA
+        file_list = self.list_files(endpoint, path)  # No date filter here
+        matching_files = []
 
         for file_item in file_list.DATA:
             if file_item.type == FilesystemDataType('dir'):
                 subdirectory_path = f"{path}/{file_item.name}" if path != '/' else f"/{file_item.name}"
                 matching_files.extend(self.list_files_recursively(endpoint, subdirectory_path, start_date, end_date).DATA)
+            elif file_item.type == FilesystemDataType('file') and self.file_within_date_range(file_item, start_date, end_date):
+                matching_files.append(file_item)
 
         return FileList(
             DATA_TYPE=file_list.DATA_TYPE,
             DATA=matching_files,
             absolute_path=file_list.absolute_path,
             endpoint=file_list.endpoint,
-            length=file_list.length,
+            length=len(matching_files),
             path=file_list.path,
             rename_supported=file_list.rename_supported,
             symlink_supported=file_list.symlink_supported,
             total=file_list.total
         )
+
+    def file_within_date_range(self, file_item: File, start_date: Optional[str], end_date: Optional[str]) -> bool:
+        """
+        Check if the file's last modification date falls within the specified start and end dates.
+
+        :param file_item: The file item to check.
+        :param start_date: The start date for the search.
+        :param end_date: The end date for the search.
+        :return: True if the file's last modification date falls within the date range, False otherwise.
+        """
+        if start_date and file_item.last_modified < start_date:
+            return False
+        if end_date and file_item.last_modified > end_date:
+            return False
+        return True
+
         
 
 
