@@ -192,11 +192,28 @@ class GlobusConnector:
     def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False) -> FileList:
         transfer_client: TransferClient = self.transfer_client
 
-        response_dict = transfer_client.operation_ls(
-            endpoint,
-            path=path,
-            orderby=["type", "name"]
-        )
+        try:
+            response_dict = transfer_client.operation_ls(
+                endpoint,
+                path=path,
+                orderby=["type", "name"]
+            )
+        except globus_sdk.TransferAPIError as err:
+            # if the error is something other than consent_required, reraise it,
+            # exiting the script with an error message
+            if not err.info.consent_required:
+                raise
+
+            # we now know that the error is a ConsentRequired
+            # print an explanatory message and do the login flow again
+            print( "Encountered a ConsentRequired error.\n" "You must login a second time to grant consents.\n\n" )
+            print(f'required scopes:\n{err.info.consent_required.required_scopes}\n')
+            transfer_client = self.login_and_get_transfer_client(scopes=err.info.consent_required.required_scopes)
+
+        except Exception as e:
+            # unhandled exception:
+            raise e
+
 
         data_files = []
         for item in response_dict['DATA']:
