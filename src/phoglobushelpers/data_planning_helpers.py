@@ -1,6 +1,10 @@
 from typing import Optional, List, Dict
-from attrs import define, field, Factory
 from pathlib import Path
+import psutil # used for `DiskInfo`
+import numpy as np
+import pandas as pd
+from attrs import define, field, Factory, asdict
+
 
 @define(slots=False)
 class AbstractEndpoint:
@@ -22,7 +26,50 @@ class AbstractEndpoint:
     mount_point: Optional[Path]
     
 
+@define(slots=False)
+class DiskInfo:
+    """ Displays info about a partition of a disk.
+     
+    Uses `psutil` to get information about the available disks from the system
 
+    # Usage
+        from phoglobushelpers.data_planning_helpers import get_mounted_disks_info, DiskInfo
+        df = get_mounted_disks_info()
+        display(df)
+        included_mounts = ['/media/MAX', '/run/media/halechr/HUUUGE', '/media/HugePort']
+        df = df[np.isin(df['mount_point'], included_mounts)]
+        df
+    """
+    device: str
+    mount_point: str
+    fstype: str
+    total: int
+    used: int
+    free: int
+    percent: float
+
+def get_mounted_disks_info(included_mounts=None):
+    partitions = psutil.disk_partitions()
+    disks = []
+
+    for partition in partitions:
+        # Filter based on included_mounts
+        if included_mounts and partition.mountpoint not in included_mounts:
+            continue
+
+        usage = psutil.disk_usage(partition.mountpoint)
+        disk = DiskInfo(
+            device=partition.device,
+            mount_point=partition.mountpoint,
+            fstype=partition.fstype,
+            total=usage.total / (1e9),  # Convert bytes to GB
+            used=usage.used / (1e9),    # Convert bytes to GB
+            free=usage.free / (1e9),    # Convert bytes to GB
+            percent=usage.percent
+        )
+        disks.append(disk)
+
+    return pd.DataFrame([asdict(disk) for disk in disks])
 
 
 

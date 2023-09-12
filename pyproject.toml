@@ -21,6 +21,9 @@ pandas = "^1.5.1"
 attrs = "^22.1.0"
 # pyphocorehelpers = {git = "https://github.com/CommanderPho/pyPhoCoreHelpers.git", tag = "project-with-optional-requirements"}
 globus-jupyterlab = "^1.0.0b10"
+google-api-python-client = "^2.98.0"
+google-auth-httplib2 = "^0.1.0"
+google-auth-oauthlib = "^1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 setuptools = "^67.6.0"
