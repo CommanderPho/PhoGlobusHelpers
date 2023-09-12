@@ -92,6 +92,11 @@ class Task:
       "username": "u_upma7q3dzfeqzg454wkb7lyqe4",
       "verify_checksum": true
     }
+    
+    {'DATA_TYPE': 'task', 'bytes_checksummed': 0, 'bytes_transferred': 246415360, 'canceled_by_admin': None, 'canceled_by_admin_message': None, 'command': 'API 0.10 go', 'completion_time': '2023-06-29T12:32:08+00:00', 'deadline': '2023-07-02T12:10:41+00:00', 'delete_destination_extra': False, 'destination_base_path': None, 'destination_endpoint': 'u_upma7q3dzfeqzg454wkb7lyqe4#84991054-07b4-11ed-8d83-a54cf61939f8', 'destination_endpoint_display_name': 'Apogee', 'destination_endpoint_id': '84991054-07b4-11ed-8d83-a54cf61939f8', 'destination_local_user': None, ...}
+    
+    ['DATA_TYPE', 'bytes_checksummed', 'bytes_transferred', 'canceled_by_admin', 'canceled_by_admin_message', 'command', 'completion_time', 'deadline', 'delete_destination_extra', 'destination_base_path', 'destination_endpoint', 'destination_endpoint_display_name', 'destination_endpoint_id', 'destination_local_user', 'destination_local_user_status', 'directories', 'effective_bytes_per_second', 'encrypt_data', 'fail_on_quota_errors', 'fatal_error', 'faults', 'files', 'files_skipped', 'files_transferred', 'filter_rules', 'history_deleted', 'is_ok', 'is_paused', 'label', 'nice_status', 'nice_status_details', 'nice_status_expires_in', 'nice_status_short_description', 'owner_id', 'preserve_timestamp', 'recursive_symlinks', 'request_time', 'skip_source_errors', 'source_base_path', 'source_endpoint', 'source_endpoint_display_name', 'source_endpoint_id', 'source_local_user', 'source_local_user_status', 'status', 'subtasks_canceled', 'subtasks_expired', 'subtasks_failed', 'subtasks_pending', 'subtasks_retrying', 'subtasks_skipped_errors', 'subtasks_succeeded', 'subtasks_total', 'symlinks', 'sync_level', 'task_id', 'type', 'username', 'verify_checksum']
+    
     """
     DATA_TYPE: str # ignores DATA_TYPE
     bytes_checksummed: int
@@ -102,9 +107,12 @@ class Task:
     completion_time: str
     deadline: str
     delete_destination_extra: bool
+    destination_base_path: Optional[Any] # Added 2023-09-12
     destination_endpoint: Optional[str]
     destination_endpoint_display_name: Optional[str]
     destination_endpoint_id: Optional[str]
+    destination_local_user: Optional[Any] # Added 2023-09-12
+    destination_local_user_status: Optional[Any] # Added 2023-09-12
     directories: int
     effective_bytes_per_second: int
     encrypt_data: bool
@@ -128,9 +136,12 @@ class Task:
     recursive_symlinks: str
     request_time: str
     skip_source_errors: bool
+    source_base_path: Optional[Any] # Added 2023-09-12
     source_endpoint: Optional[str]
     source_endpoint_display_name: Optional[str]
     source_endpoint_id: Optional[str]
+    source_local_user: Optional[Any] # Added 2023-09-12
+    source_local_user_status: Optional[Any] # Added 2023-09-12
     status: str
     subtasks_canceled: int
     subtasks_expired: int
@@ -146,6 +157,9 @@ class Task:
     type: str
     username: str
     verify_checksum: bool
+    
+    # missing fields:
+    # destination_base_path
     
     def __attrs_post_init__(self):
         if self.fatal_error is not None:

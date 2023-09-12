@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "phoglobushelpers"
-version = "0.2.1"
+version = "0.2.2"
 description = "A series of helpers to help the lab with Globus Endpoint related tasks"
 authors = ["Pho Hale <PhoHale@gmail.com>"]
 readme = "README.md"
