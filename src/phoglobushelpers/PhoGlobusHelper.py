@@ -6,7 +6,7 @@ from typing import Any, List, Optional, Dict, Union
 from globus_sdk.response import GlobusHTTPResponse
 import pandas as pd
 import globus_sdk
-from globus_sdk import AccessTokenAuthorizer, TransferClient, TransferData
+from globus_sdk import AccessTokenAuthorizer, TransferClient, TransferData, TransferAPIError
 from globus_sdk.scopes import TransferScopes
 from attrs import define, field, Factory
 
@@ -128,7 +128,7 @@ class GlobusConnector:
         return tasks_list
 
 
-    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List, filelist_dest:List, max_single_file_wait_time_seconds=3*60*60):
+    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List[str], filelist_dest:List[str], label: str = "Batch Transfer", batch_size: int = 100, synchronous_wait:bool=False, max_single_file_wait_time_seconds=60):
         """ performs a batch transfer for the files specified in the filelists from source to endpoint.
         # Set your source and destination endpoint IDs
         # source_endpoint = "SOURCE_ENDPOINT_ID"
@@ -149,14 +149,25 @@ class GlobusConnector:
 
         Usage:
 
-            batch_transfer_files(transfer_client, source_endpoint=endpoint_LNX00052_Fedora, destination_endpoint=endpoint_LNX00052_Fedora, filelist_source:List, filelist_dest:List, max_single_file_wait_time_seconds=3*60*60)
+        ## INPUTS: src_lines, dest_lines, apogee_gen_scripts_folder_bookmark, lab_Greatlakes_gen_scripts
+        endpoint_relative_src_lines = [a_line for a_line in src_lines]
+        endpoint_relative_dest_lines = [a_line for a_line in dest_lines]
+        
+        # Async:
+        _transfer_task = connect_man.batch_transfer_files(source_endpoint=lab_Greatlakes_gen_scripts.endpoint_id, destination_endpoint=apogee_gen_scripts_folder_bookmark.endpoint_id, filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines)
+        _transfer_task
+
+        # Waiting for completion:
+        pending_tasks, (completed_tasks, failed_tasks) = connect_man.batch_transfer_files(source_endpoint=lab_Greatlakes_gen_scripts.endpoint_id, destination_endpoint=apogee_gen_scripts_folder_bookmark.endpoint_id, filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines, synchronous_wait=True)
+        completed_tasks
 
         """
+        pending_tasks = {}
         transfer_client: TransferClient = self.transfer_client
 
         # Set your transfer options
         transfer_options = {
-            "preserve_timestamp": True
+            # "preserve_timestamp": True
         }
 
         # Turn them all into strings
@@ -166,94 +177,60 @@ class GlobusConnector:
         # Verify that the source and destination lists have the same length
         assert len(filelist_source) == len(filelist_dest), "Error: Source and destination file lists must have the same length."
 
-        # Loop through the file lists and initiate the transfers
-        for source_path, destination_path in zip(filelist_source, filelist_dest):
-            # Create a TransferData object
-            transfer_data = TransferData(
-                transfer_client,
-                source_endpoint,
-                destination_endpoint,
-                label="Batch File Transfer",
-                sync_level="checksum",
-                **transfer_options
-            )
-
-            # Add the file transfer to the TransferData object
-            transfer_data.add_item(source_path, destination_path)
-
-            # Initiate the transfer
-            transfer_result = transfer_client.submit_transfer(transfer_data)
-
-            print(f"Transferring {source_path} to {destination_path}...")
-
-            # Wait for the transfer to complete
-            transfer_client.task_wait(transfer_result["task_id"], timeout=max_single_file_wait_time_seconds, polling_interval=10)
-
-        print("All transfers completed successfully.")
-
-
-    # def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False) -> FileList:
-    #     transfer_client: TransferClient = self.transfer_client
-
-    #     try:
-    #         response_dict = transfer_client.operation_ls(
-    #             endpoint,
-    #             path=path,
-    #             orderby=["type", "name"]
-    #         )
-    #     except globus_sdk.TransferAPIError as err:
-    #         # if the error is something other than consent_required, reraise it,
-    #         # exiting the script with an error message
-    #         if not err.info.consent_required:
-    #             raise
-
-    #         # we now know that the error is a ConsentRequired
-    #         # print an explanatory message and do the login flow again
-    #         print( "Encountered a ConsentRequired error.\n" "You must login a second time to grant consents.\n\n" )
-    #         print(f'required scopes:\n{err.info.consent_required.required_scopes}\n')
-    #         transfer_client = self.login_and_get_transfer_client(scopes=err.info.consent_required.required_scopes)
-
-    #     except Exception as e:
-    #         # unhandled exception:
-    #         raise e
+        try:
+            total_files: int = len(filelist_source)
+            
+            # Loop through the file lists and initiate the transfers
+            for i in range(0, total_files, batch_size):
+                batch_sources = filelist_source[i:i + batch_size]
+                batch_dests = filelist_dest[i:i + batch_size]
+                
+                # Create a TransferData object
+                transfer_data = TransferData(
+                    transfer_client,
+                    source_endpoint,
+                    destination_endpoint,
+                    label=f"{label} - Batch {i // batch_size + 1}",
+                    sync_level="checksum",
+                    **transfer_options
+                )
+                # Add the file transfers to the TransferData object            
+                for src_path, dest_path in zip(batch_sources, batch_dests):
+                    transfer_data.add_item(src_path, dest_path)
+                
+                # Initiate the transfer task
+                task = transfer_client.submit_transfer(transfer_data)
+                print(f"Submitted transfer task {task['task_id']} with {len(batch_sources)} files.")
+                pending_tasks[str(task['task_id'])] = task
+                
+        except TransferAPIError as api_error:
+            print(f"Globus API Error: {api_error}")
+        except Exception as e:
+            print(f"An unexpected error occurred during batch transfer: {e}")
 
 
-    #     data_files = []
-    #     for item in response_dict['DATA']:
-    #         file_item = File(
-    #             group=item['group'],
-    #             last_modified=item['last_modified'],
-    #             link_group=item['link_group'], link_last_modified=item['link_last_modified'], link_size=item['link_size'], link_target=item['link_target'], link_user=item['link_user'],
-    #             name=item['name'],
-    #             permissions=item['permissions'],
-    #             size=item['size'],
-    #             type=FilesystemDataType(item['type']),
-    #             user=item['user'],
-    #             parent_path=path
-    #         )
+        if synchronous_wait:
+            completed_tasks = {}
+            failed_tasks = {}
+            print(f'because `synchronous_wait == True`, synchronously waiting for {len(pending_tasks)} tasks to complete:')
+            for task_id, a_task in pending_tasks.items():
+                print(f"Waiting for task {task_id} to complete...")
+                did_complete: bool = transfer_client.task_wait(task_id, timeout=max_single_file_wait_time_seconds)
+                if did_complete:
+                    print(f"Task {task_id} completed.")
+                    completed_tasks[task_id] = pending_tasks[task_id] # pending_tasks.pop(task_id)
+                else:
+                    print(f'Task {task_id} failed or did not complete within max_single_file_wait_time_seconds: {max_single_file_wait_time_seconds}')
+                    failed_tasks[task_id] = pending_tasks[task_id] # pending_tasks.pop(task_id)
+                    
+            print("All transfers completed successfully.")
+            return pending_tasks, (completed_tasks, failed_tasks)
+        else:
+            return pending_tasks
+        
 
-    #         if file_item.type == FilesystemDataType('dir'):
-    #             if should_list_recursively:
-    #                 subdirectory_path = f"{path}/{file_item.name}" if path != '/' else f"/{file_item.name}"
-    #                 data_files.extend(self.list_files(endpoint, subdirectory_path, start_date, end_date, should_list_recursively).DATA)
-    #         elif file_item.type == FilesystemDataType('file') and (not start_date and not end_date or self.file_within_date_range(file_item, start_date, end_date)):
-    #             data_files.append(file_item)
 
-    #     file_list = FileList(
-    #         DATA_TYPE=response_dict['DATA_TYPE'],
-    #         DATA=data_files,
-    #         absolute_path=response_dict['absolute_path'],
-    #         endpoint=response_dict['endpoint'],
-    #         length=len(data_files),
-    #         path=response_dict['path'],
-    #         rename_supported=response_dict['rename_supported'],
-    #         symlink_supported=response_dict['symlink_supported'],
-    #         total=response_dict['total'],
-    #     )
-    #     return file_list
-    
-
-    def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False, depth: int = 1, current_depth: int = 0, filter: Optional[(str | TransferFilterDict | list[str | TransferFilterDict])] = None) -> FileList:
+    def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False, max_depth: int = 1, _current_depth: int = 0, filter: Optional[(str | TransferFilterDict | list[str | TransferFilterDict])] = None) -> FileList:
         """ NOTE: only returns FILES, not FOLDERS/DIRECTORIES
         
         For filter format, see: https://docs.globus.org/api/transfer/file_operations/#dir_listing_filtering
@@ -313,15 +290,15 @@ class GlobusConnector:
                 parent_path=path
             )
 
-            if file_item.type == FilesystemDataType('dir') and should_list_recursively and current_depth < depth:
+            if file_item.type == FilesystemDataType('dir') and should_list_recursively and _current_depth < max_depth:
                 # subdirectory_path = f"{path.rstrip('/')}/{file_item.name}"
                 subdirectory_path = f"{path}/{file_item.name}" if path != '/' else f"/{file_item.name}"
                 # Correcting double forward slashes in 'parent_path'
                 subdirectory_path = subdirectory_path.replace('//', '/')
 
 
-                data_files.extend(self.list_files(endpoint=endpoint, path=subdirectory_path, start_date=start_date, end_date=end_date, should_list_recursively=should_list_recursively, depth=depth, current_depth=(current_depth + 1), filter=filter).DATA)
-            elif file_item.type == FilesystemDataType('file') and (not start_date and not end_date or self.file_within_date_range(file_item, start_date, end_date)):
+                data_files.extend(self.list_files(endpoint=endpoint, path=subdirectory_path, start_date=start_date, end_date=end_date, should_list_recursively=should_list_recursively, max_depth=max_depth, _current_depth=(_current_depth + 1), filter=filter).DATA)
+            elif file_item.type == FilesystemDataType('file') and (not start_date and not end_date or self.is_file_within_date_range(file_item, start_date, end_date)):
                 data_files.append(file_item)
 
         file_list = FileList(
@@ -340,7 +317,7 @@ class GlobusConnector:
 
     
 
-    def file_within_date_range(self, file_item: File, start_date: Optional[str], end_date: Optional[str]) -> bool:
+    def is_file_within_date_range(self, file_item: File, start_date: Optional[str], end_date: Optional[str]) -> bool:
         """
         Check if the file's last modification date falls within the specified start and end dates.
 
@@ -377,10 +354,11 @@ def get_only_most_recent_log_files(log_file_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_greatlakes_gen_scripts_log_files(connect_man, max_num_day_ago: int = 4, start_date=None):
-    """
+    """ Gets the log files produced by `gen_scripts` on Greatlakes
     from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
-    
-    all_log_file_df, most_recent_only_log_file_df = get_greatlakes_gen_scripts_log_files(connect_man, start_date="2023-08-07")
+
+    all_log_file_df, most_recent_only_log_file_df = get_greatlakes_gen_scripts_log_files(connect_man)
+    most_recent_only_log_file_df
     """
     if start_date is None:
         earliest_search_day_date = (datetime.now() - timedelta(days=max_num_day_ago)).date()
@@ -389,7 +367,7 @@ def get_greatlakes_gen_scripts_log_files(connect_man, max_num_day_ago: int = 4, 
         start_date = DAY_DATE_STR
         
     lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
-    log_file_list: FileList = connect_man.list_files(endpoint=lab_Greatlakes_gen_scripts.endpoint_id, path=lab_Greatlakes_gen_scripts.path, start_date=start_date, end_date=None, should_list_recursively=True, depth=1, filter="name:~*.log,~*.err")
+    log_file_list: FileList = connect_man.list_files(endpoint=lab_Greatlakes_gen_scripts.endpoint_id, path=lab_Greatlakes_gen_scripts.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=1, filter="name:~*.log,~*.err")
     all_log_file_df: pd.DataFrame = log_file_list.to_dataframe() #.columns
     
     most_recent_only_log_file_df = get_only_most_recent_log_files(log_file_df=all_log_file_df)
