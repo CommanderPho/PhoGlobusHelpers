@@ -11,9 +11,8 @@ from globus_sdk.scopes import TransferScopes
 from attrs import define, field, Factory
 
 from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
-from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList
+from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList, get_only_most_recent_log_files
 from phoglobushelpers.compatibility_objects.Tasks import FatalError, Task, TaskList
-
 TransferFilterDict = Dict[str, Union[str, List[str]]]
 
 
@@ -333,44 +332,46 @@ class GlobusConnector:
         return True
         
 
+    def get_greatlakes_gen_scripts_log_files(self, max_num_day_ago: int = 4, start_date=None):
+        """ Gets the log files produced by `gen_scripts` on Greatlakes
+        from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
 
-def get_only_most_recent_log_files(log_file_df: pd.DataFrame) -> pd.DataFrame:
-    """ returns a dataframe containing only the most recent '.err' and '.log' file for each session. 
-    """
-    df = deepcopy(log_file_df)
-    df['last_modified'] = pd.to_datetime(df['last_modified'])
-
-    # Separate .err and .log files
-    err_files = df[df['name'].str.endswith('.err')]
-    log_files = df[df['name'].str.endswith('.log')]
-
-    # Get the most recent .err and .log file for each parent_path
-    most_recent_err = err_files.loc[err_files.groupby('parent_path')['last_modified'].idxmax()]
-    most_recent_log = log_files.loc[log_files.groupby('parent_path')['last_modified'].idxmax()]
-
-    # Concatenate the results
-    most_recent_files = pd.concat([most_recent_err, most_recent_log]).sort_values(by=['parent_path', 'last_modified'], ascending=[True, False])
-    return most_recent_files
-
-
-def get_greatlakes_gen_scripts_log_files(connect_man, max_num_day_ago: int = 4, start_date=None):
-    """ Gets the log files produced by `gen_scripts` on Greatlakes
-    from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
-
-    all_log_file_df, most_recent_only_log_file_df = get_greatlakes_gen_scripts_log_files(connect_man)
-    most_recent_only_log_file_df
-    """
-    if start_date is None:
-        earliest_search_day_date = (datetime.now() - timedelta(days=max_num_day_ago)).date()
-        DAY_DATE_STR: str = earliest_search_day_date.strftime("%Y-%m-%d")
-        print(f'earliest_search_day_date: {DAY_DATE_STR}')
-        start_date = DAY_DATE_STR
+        all_log_file_df, most_recent_only_log_file_df = get_greatlakes_gen_scripts_log_files(connect_man)
+        most_recent_only_log_file_df
+        """
+        if start_date is None:
+            earliest_search_day_date = (datetime.now() - timedelta(days=max_num_day_ago)).date()
+            DAY_DATE_STR: str = earliest_search_day_date.strftime("%Y-%m-%d")
+            print(f'earliest_search_day_date: {DAY_DATE_STR}')
+            start_date = DAY_DATE_STR
+            
+        lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
+        log_file_list: FileList = self.list_files(endpoint=lab_Greatlakes_gen_scripts.endpoint_id, path=lab_Greatlakes_gen_scripts.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=1, filter="name:~*.log,~*.err")
+        all_log_file_df: pd.DataFrame = log_file_list.to_dataframe() #.columns
         
-    lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
-    log_file_list: FileList = connect_man.list_files(endpoint=lab_Greatlakes_gen_scripts.endpoint_id, path=lab_Greatlakes_gen_scripts.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=1, filter="name:~*.log,~*.err")
-    all_log_file_df: pd.DataFrame = log_file_list.to_dataframe() #.columns
+        most_recent_only_log_file_df = get_only_most_recent_log_files(log_file_df=all_log_file_df)
+        return all_log_file_df, most_recent_only_log_file_df
     
-    most_recent_only_log_file_df = get_only_most_recent_log_files(log_file_df=all_log_file_df)
-    return all_log_file_df, most_recent_only_log_file_df
+
+    def get_greatlakes_collected_outputs_files(self, max_num_day_ago: int = 4, start_date=None, filter="name:~*.csv,~*.h5"):
+        """ Gets the log files produced by `gen_scripts` on Greatlakes
+        from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
+
+        all_log_file_df, most_recent_only_log_file_df = get_greatlakes_gen_scripts_log_files(connect_man)
+        most_recent_only_log_file_df
+        """
+        if start_date is None:
+            earliest_search_day_date = (datetime.now() - timedelta(days=max_num_day_ago)).date()
+            DAY_DATE_STR: str = earliest_search_day_date.strftime("%Y-%m-%d")
+            print(f'earliest_search_day_date: {DAY_DATE_STR}')
+            start_date = DAY_DATE_STR
+            
+        lab_Turbo_collected_outputs_bookmark = Bookmark(bookmark_id='91181e28-f90d-11ee-9222-472b0fe4395a', name='KDIBA Lab Turbo - collected_outputs', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/')
+        lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
+        file_list: FileList = self.list_files(endpoint=lab_Turbo_collected_outputs_bookmark.endpoint_id, path=lab_Turbo_collected_outputs_bookmark.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=2, filter=filter)
+        all_file_df: pd.DataFrame = file_list.to_dataframe() #.columns
+        
+        # most_recent_only_file_df = get_only_most_recent_log_files(log_file_df=all_file_df)
+        return all_file_df
 
 

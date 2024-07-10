@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import List, Dict, Optional, Any
 from attrs import define, field, Factory
 from enum import Enum
@@ -157,3 +158,24 @@ class FileList:
 
 
 
+def get_only_most_recent_log_files(log_file_df: pd.DataFrame) -> pd.DataFrame:
+    """ returns a dataframe containing only the most recent '.err' and '.log' file for each session. 
+    
+    from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList, get_only_most_recent_log_files
+    
+    
+    """
+    df = deepcopy(log_file_df)
+    df['last_modified'] = pd.to_datetime(df['last_modified'])
+
+    # Separate .err and .log files
+    err_files = df[df['name'].str.endswith('.err')]
+    log_files = df[df['name'].str.endswith('.log')]
+
+    # Get the most recent .err and .log file for each parent_path
+    most_recent_err = err_files.loc[err_files.groupby('parent_path')['last_modified'].idxmax()]
+    most_recent_log = log_files.loc[log_files.groupby('parent_path')['last_modified'].idxmax()]
+
+    # Concatenate the results
+    most_recent_files = pd.concat([most_recent_err, most_recent_log]).sort_values(by=['parent_path', 'last_modified'], ascending=[True, False])
+    return most_recent_files
