@@ -229,7 +229,7 @@ class GlobusConnector:
         
 
 
-    def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False, max_depth: int = 1, _current_depth: int = 0, filter: Optional[(str | TransferFilterDict | list[str | TransferFilterDict])] = None) -> FileList:
+    def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False, max_depth: int = 1, _current_depth: int = 0, filter:Optional[Any]=None) -> FileList:
         """ NOTE: only returns FILES, not FOLDERS/DIRECTORIES
         
         For filter format, see: https://docs.globus.org/api/transfer/file_operations/#dir_listing_filtering
