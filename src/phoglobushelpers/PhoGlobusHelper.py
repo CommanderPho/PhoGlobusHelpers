@@ -1,3 +1,4 @@
+from pathlib import Path
 import time
 from copy import deepcopy
 from collections import deque
@@ -23,6 +24,19 @@ class KnownEndpoints:
     endpoint_Apogee:str = '84991054-07b4-11ed-8d83-a54cf61939f8' # Pho's personal computer
     
 
+@define(slots=False, eq=False)
+class TransferRequest:
+    """ Defines the source/dest of a transfer from one source to another endpoint 
+    from phoglobushelpers.PhoGlobusHelper import TransferRequest
+    
+    """
+    source_endpoint: Bookmark = field()
+    source_endpoint_path: str = field()
+    
+    dest_endpoint: Bookmark = field()
+    dest_path_root: str = field() # '/home/halechr/data/collected_outputs/' # rMBP
+    transfer_label: str = field(default='GL->_ Collected Outputs Files')
+    
 @define(slots=False, repr=False)
 class GlobusConnector:
     """ A wrapper that holds an active connection to Globus and allows object-oriented operations to fetch endpoints, bookmarks, files, and perform operations on them.
@@ -127,7 +141,7 @@ class GlobusConnector:
         return tasks_list
 
 
-    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List[str], filelist_dest:List[str], label: str = "Batch Transfer", batch_size: int = 100, synchronous_wait:bool=False, max_single_file_wait_time_seconds=60):
+    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List[str], filelist_dest:List[str], label: str = "Batch Transfer", batch_size: int = 1000, synchronous_wait:bool=False, max_single_file_wait_time_seconds=60):
         """ performs a batch transfer for the files specified in the filelists from source to endpoint.
         # Set your source and destination endpoint IDs
         # source_endpoint = "SOURCE_ENDPOINT_ID"
@@ -375,3 +389,30 @@ class GlobusConnector:
         return all_file_df
 
 
+    # def perform_copy_files(active_file_df: pd.DataFrame, transfer_label: str, synchronous_wait:bool=True):
+    def perform_copy_files(self, active_file_df: pd.DataFrame, transfer:TransferRequest, synchronous_wait:bool=True):
+        """ performs the copy files action between two sources
+
+        """
+        ## INPUTS: all_file_df
+        active_file_paths: List[Path] = [Path(row.parent_path).joinpath(row.name) for row in active_file_df.itertuples(name='LogFile')]
+
+        endpoint_relative_src_lines: List[str] = [str(a_line.as_posix()) for a_line in active_file_paths]
+        endpoint_relative_dest_lines: List[str] = [a_line.replace(transfer.source_endpoint_path, transfer.dest_path_root, 1) for a_line in endpoint_relative_src_lines]
+
+        ## INPUTS: src_lines, dest_lines, apogee_gen_scripts_folder_bookmark, lab_Greatlakes_gen_scripts
+        return self.batch_transfer_files(source_endpoint=transfer.source_endpoint.endpoint_id, destination_endpoint=transfer.dest_endpoint.endpoint_id,
+                                                                                            filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines,
+                                                                                            synchronous_wait=synchronous_wait, label=transfer.transfer_label)
+        
+        # if synchronous_wait:
+        # 	# Synchronously wait for transfer to complete
+        # 	pending_tasks, (completed_tasks, failed_tasks) = connect_man.batch_transfer_files(source_endpoint=transfer.source_endpoint.endpoint_id, destination_endpoint=transfer.dest_endpoint.endpoint_id,
+        # 																					filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines,
+        # 																					synchronous_wait=True, label=transfer.transfer_label)
+        # 	return completed_tasks
+        # else:
+        # 	# ## Async:
+        # 	return connect_man.batch_transfer_files(source_endpoint=source_endpoint.endpoint_id, destination_endpoint=dest_endpoint.endpoint_id, filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines,
+        # 																					synchronous_wait=False, label=transfer_label)
+        
