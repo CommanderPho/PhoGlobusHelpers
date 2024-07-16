@@ -31,12 +31,25 @@ class TransferRequest:
     
     """
     source_endpoint: Bookmark = field()
-    source_endpoint_path: str = field()
-    
     dest_endpoint: Bookmark = field()
-    dest_path_root: str = field() # '/home/halechr/data/collected_outputs/' # rMBP
+
+    source_endpoint_path: str = field(default=None)
+    dest_path_root: str = field(default=None) # '/home/halechr/data/collected_outputs/' # rMBP
+    
     transfer_label: str = field(default='GL->_ Collected Outputs Files')
     
+    def __attrs_post_init__(self):
+        """ set the paths to default if they are None. """
+        
+        if self.source_endpoint_path is None:
+            self.source_endpoint_path = self.source_endpoint.path
+
+        if self.dest_path_root is None:
+            self.dest_path_root = self.dest_endpoint.path
+
+
+
+
 @define(slots=False, repr=False)
 class GlobusConnector:
     """ A wrapper that holds an active connection to Globus and allows object-oriented operations to fetch endpoints, bookmarks, files, and perform operations on them.
