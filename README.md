@@ -51,3 +51,9 @@ umich#greatlakes - halechr home folder                       | b0569b9c-2558-11e
 umms-dibalab DataDen                                         | bef81650-96c5-11ed-9b93-19370d280681 | ab65757f-00f5-4e5b-aa21-133187732a01 | UMich ARC Non-Sensitive Data Den Volume Collection   | /umms-dibalab/
 
 ```
+
+
+# File Manager Links:
+
+https://app.globus.org/file-manager?destination_id=cee0aaec-3e3b-11ef-9637-453c3ae125a5&destination_path=%2Fmedia%2Fhalechr%2FBETAMAX%2FData%2F&origin_id=8c185a84-5c61-4bbc-b12b-11430e20010f&origin_path=%2Fumms-kdiba%2FData%2F&two_pane=true
+
