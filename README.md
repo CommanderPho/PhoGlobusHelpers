@@ -57,3 +57,7 @@ umms-dibalab DataDen                                         | bef81650-96c5-11e
 
 https://app.globus.org/file-manager?destination_id=cee0aaec-3e3b-11ef-9637-453c3ae125a5&destination_path=%2Fmedia%2Fhalechr%2FBETAMAX%2FData%2F&origin_id=8c185a84-5c61-4bbc-b12b-11430e20010f&origin_path=%2Fumms-kdiba%2FData%2F&two_pane=true
 
+
+# Turbo Logs to Lab Logs
+https://app.globus.org/file-manager?destination_id=cee0aaec-3e3b-11ef-9637-453c3ae125a5&destination_path=%2Fhome%2Fhalechr%2FFastData%2Fgen_scripts%2F&origin_id=8c185a84-5c61-4bbc-b12b-11430e20010f&origin_path=%2Fumms-kdiba%2FData%2FOutput%2Fgen_scripts%2F&two_pane=true
+
