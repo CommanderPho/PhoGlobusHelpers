@@ -9,8 +9,58 @@ import shutil # for _backup_extant_file(...)
 from datetime import datetime
 import pandas as pd
 
+from urllib.parse import quote, urlparse, parse_qs, unquote
+import webbrowser
 
 known_global_data_root_parent_paths = [Path(r'W:\Data'), Path(r'/media/MAX/Data'), Path(r'/Volumes/MoverNew/data'), Path(r'/home/halechr/turbo/Data'), Path(r'/nfs/turbo/umms-kdiba/Data')]
+
+
+def build_globus_web_filemanager_url(origin_path: str = r'%2Fumms-dibalab%2FData%2FRachel%2FRecording_Rats%2FPetunia%2F', destination_id: str = '84991054-07b4-11ed-8d83-a54cf61939f8', destination_path: str = r'%2FW%2FData%2FRachel%2FPetunia%2F', origin_id: str = r'ab65757f-00f5-4e5b-aa21-133187732a01', enable_open_in_browser: bool=True) -> str:
+    """ 
+    https://app.globus.org/file-manager?destination_id=84991054-07b4-11ed-8d83-a54cf61939f8&destination_path=%2FW%2FData%2FRachel%2FPetunia%2F&origin_id=ab65757f-00f5-4e5b-aa21-133187732a01&origin_path=%2Fumms-dibalab%2FData%2FRachel%2FRecording_Rats%2FPetunia%2F&two_pane=true
+
+    from phoglobushelpers.path_helpers import build_globus_web_filemanager_url
+    
+    url1 = build_globus_web_filemanager_url(destination_id=lab_Turbo_collected_outputs_bookmark.endpoint_id, destination_path=lab_Turbo_collected_outputs_bookmark.path, origin_id=lab_Greatlakes_gen_scripts.endpoint_id, origin_path=lab_Greatlakes_gen_scripts.path)
+
+    url2 = build_globus_web_filemanager_url(destination_id=lab_Greatlakes_gen_scripts.endpoint_id, destination_path=lab_Greatlakes_gen_scripts.path, origin_id=lab_Turbo_collected_outputs_bookmark.endpoint_id, origin_path=lab_Turbo_collected_outputs_bookmark.path)
+
+
+    
+    """
+    ## if `destination_path` and `origin_path` aren't already web URL escaped, do that, otherwise pass them through unchanged.
+    def subfn_ensure_encoded(path: str) -> str:
+        return path if unquote(path) != path else quote(path, safe="/")
+
+    destination_path = subfn_ensure_encoded(destination_path)
+    origin_path = subfn_ensure_encoded(origin_path)
+
+    url_str = f"https://app.globus.org/file-manager?destination_id={destination_id}&destination_path={destination_path}&origin_id={origin_id}&origin_path={origin_path}&two_pane=true"
+    if enable_open_in_browser:
+        print(f'opening "{url_str}" in browser...l')
+        try:
+            webbrowser.open_new_tab(url_str)
+        except webbrowser.Error:
+            print("No browser available (likely headless server).")
+            
+
+    return url_str
+
+
+def parse_globus_filemanager_url(url: str) -> dict:
+    """ Takes a URL from the browser and produces the corresponding transfer records that can be saved. 
+    Inverse of `build_globus_web_filemanager_url`
+    """
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    return {
+        "destination_id": qs.get("destination_id", [None])[0],
+        "destination_path": unquote(qs.get("destination_path", [None])[0]) if "destination_path" in qs else None,
+        "origin_id": qs.get("origin_id", [None])[0],
+        "origin_path": unquote(qs.get("origin_path", [None])[0]) if "origin_path" in qs else None,
+        "two_pane": qs.get("two_pane", [None])[0],
+    }
+
 
 
 def find_first_extant_path(path_list: List[Path]) -> Path:

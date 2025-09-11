@@ -14,6 +14,10 @@ from attrs import define, field, Factory
 from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
 from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList, get_only_most_recent_log_files
 from phoglobushelpers.compatibility_objects.Tasks import FatalError, Task, TaskList
+from phoglobushelpers.path_helpers import build_globus_web_filemanager_url, parse_globus_filemanager_url
+
+
+
 TransferFilterDict = Dict[str, Union[str, List[str]]]
 
 
@@ -429,3 +433,59 @@ class GlobusConnector:
         # 	return connect_man.batch_transfer_files(source_endpoint=source_endpoint.endpoint_id, destination_endpoint=dest_endpoint.endpoint_id, filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines,
         # 																					synchronous_wait=False, label=transfer_label)
         
+
+
+    @classmethod
+    def build_globus_web_filemanager_url(cls, origin: Union[str, Bookmark], dest: Union[str, Bookmark], origin_path: Optional[str] = None, destination_path: Optional[str] = None, enable_open_in_browser: bool=True) -> str:
+        """ 
+            https://app.globus.org/file-manager?destination_id=84991054-07b4-11ed-8d83-a54cf61939f8&destination_path=%2FW%2FData%2FRachel%2FPetunia%2F&origin_id=ab65757f-00f5-4e5b-aa21-133187732a01&origin_path=%2Fumms-dibalab%2FData%2FRachel%2FRecording_Rats%2FPetunia%2F&two_pane=true
+
+        Usage:
+            from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark
+            from phoglobushelpers.PhoGlobusHelper import GlobusConnector
+
+            connect_man.build_globus_web_filemanager_url(lab_Turbo_collected_outputs_bookmark, lab_Greatlakes_gen_scripts)
+
+                        
+        """
+        if not isinstance(origin, str):
+            ## assume it's a Bookmark passed
+            assert isinstance(origin, Bookmark), f"origin is of type: {origin} but expected bookmark or str id"
+            if origin_path is None:
+                origin_path = origin.path
+            origin = origin.endpoint_id
+            
+        if not isinstance(dest, str):
+            ## assume it's a Bookmark passed
+            assert isinstance(dest, Bookmark), f"dest is of type: {dest} but expected bookmark or str id"
+            if destination_path is None:
+                destination_path = dest.path
+            dest = dest.endpoint_id
+
+        return build_globus_web_filemanager_url(destination_id=dest, destination_path=destination_path, origin_id=origin, origin_path=origin_path, enable_open_in_browser=enable_open_in_browser)
+    
+
+    @classmethod
+    def parse_globus_filemanager_url(cls, url: str=None):
+        """ 
+        
+                https://app.globus.org/file-manager?destination_id=8c185a84-5c61-4bbc-b12b-11430e20010f&destination_path=/umms-kdiba/Data/Output/gen_scripts/&origin_id=8c185a84-5c61-4bbc-b12b-11430e20010f&origin_path=/umms-kdiba/Data/Output/collected_outputs/&two_pane=true
+                
+                {'destination_id': '8c185a84-5c61-4bbc-b12b-11430e20010f',
+                 'destination_path': '/umms-kdiba/Data/Output/gen_scripts/',
+                 'origin_id': '8c185a84-5c61-4bbc-b12b-11430e20010f',
+                 'origin_path': '/umms-kdiba/Data/Output/collected_outputs/',
+                 'two_pane': 'true'}
+                 
+        """
+        if url is None:
+            ## get from clipboard
+            import tkinter as tk
+            root = tk.Tk()
+            root.withdraw()
+            url = root.clipboard_get()
+            root.destroy()
+            print(f'got url from clipboard: "{url}"')
+            
+        return parse_globus_filemanager_url(url=url)
+    
