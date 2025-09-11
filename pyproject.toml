@@ -1,35 +1,42 @@
-[tool.poetry]
+[project]
 name = "phoglobushelpers"
 version = "0.2.2"
 description = "A series of helpers to help the lab with Globus Endpoint related tasks"
-authors = ["Pho Hale <PhoHale@gmail.com>"]
+authors = [{ name = "Pho Hale", email = "PhoHale@gmail.com" }]
+requires-python = ">=3.9,<3.12"
 readme = "README.md"
-packages = [
-    { include = "phoglobushelpers", from = "src" },
+dependencies = [
+    "globus-sdk>=3.16.0,<4",
+    "globus-cli>=3.13.0,<4",
+    "pathlib>=1.0.1,<2",
+    "wheel>=0.38.4,<0.39",
+    "ipython>=8.11.0,<9",
+    "fair-research-login>=0.3.0,<0.4",
+    "ipykernel>=6.23.1,<7",
+    "pandas>=1.5.1,<2",
+    "attrs>=22.1.0,<23",
+    "globus-jupyterlab>=1.0.0b10,<2",
+    "google-api-python-client>=2.98.0,<3",
+    "google-auth-httplib2>=0.1.0,<0.2",
+    "google-auth-oauthlib>=1.0.0,<2",
+    "watchdog>=5.0.3,<6",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.9,<3.12"
-globus-sdk = "^3.16.0"
-globus-cli = "^3.13.0"
-pathlib = "^1.0.1"
-wheel = "^0.38.4"
-ipython = "^8.11.0"
-fair-research-login = "^0.3.0"
-ipykernel = "^6.23.1"
-pandas = "^1.5.1"
-attrs = "^22.1.0"
-# pyphocorehelpers = {git = "https://github.com/CommanderPho/pyPhoCoreHelpers.git", tag = "project-with-optional-requirements"}
-globus-jupyterlab = "^1.0.0b10"
-google-api-python-client = "^2.98.0"
-google-auth-httplib2 = "^0.1.0"
-google-auth-oauthlib = "^1.0.0"
-watchdog = "^5.0.3"
+[dependency-groups]
+dev = [
+    "setuptools>=67.6.0,<68",
+    "wheel>=0.38.4,<0.39",
+]
 
-[tool.poetry.group.dev.dependencies]
-setuptools = "^67.6.0"
-wheel = "^0.38.4"
+[tool.hatch.build.targets.sdist]
+include = ["src/phoglobushelpers"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/phoglobushelpers"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/phoglobushelpers" = "phoglobushelpers"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
