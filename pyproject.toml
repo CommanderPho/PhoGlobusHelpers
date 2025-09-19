@@ -20,6 +20,7 @@ dependencies = [
     "google-auth-httplib2>=0.1.0,<0.2",
     "google-auth-oauthlib>=1.0.0,<2",
     "watchdog>=5.0.3,<6",
+    "globus-compute-sdk>=2.29.0",
 ]
 
 [dependency-groups]
