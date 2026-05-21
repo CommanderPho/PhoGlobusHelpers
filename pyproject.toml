@@ -1,6 +1,6 @@
 [project]
 name = "phoglobushelpers"
-version = "0.2.2"
+version = "0.2.3"
 description = "A series of helpers to help the lab with Globus Endpoint related tasks"
 authors = [{ name = "Pho Hale", email = "PhoHale@gmail.com" }]
 requires-python = ">=3.9,<3.12"
@@ -21,6 +21,8 @@ dependencies = [
     "google-auth-oauthlib>=1.0.0,<2",
     "watchdog>=5.0.3,<6",
     "globus-compute-sdk>=2.29.0",
+    "pyside6>=6.10.3",
+    "fusepy>=3.0.1",
 ]
 
 [dependency-groups]

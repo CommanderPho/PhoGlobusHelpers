@@ -4,7 +4,7 @@ A series of helpers to help the lab with Globus Endpoint related tasks
 https://github.com/globus/native-app-examples
 https://github.com/globus/globus-cli
 
-To get started, just run `poetry install` in your terminal.
+To get started, just run `uv sync --all` in your terminal.
 ```
 
 
