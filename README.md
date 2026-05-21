@@ -5,10 +5,14 @@ https://github.com/globus/native-app-examples
 https://github.com/globus/globus-cli
 
 To get started, just run `uv sync --all` in your terminal.
-```
+
+## Documentation
+- [Globus FUSE Mount](docs/globus_fuse_mount.md) - Learn how to mount remote Globus endpoints locally using FUSE.
+- [Globus Notes](docs/GlobusNotes.md) - Installing/Configuring Globus Connect Personal on Linux and transferring files.
 
 
-```
+## TODO
+- [ ] authentication for FUSE mount should follow the newer https://globus-sdk-python.readthedocs.io/en/stable/authorization/globus_app/apps.html pattern rather than the older fair-research-use pattern.
 
 
 # Bookmarks
