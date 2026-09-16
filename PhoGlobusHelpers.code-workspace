@@ -1,0 +1,38 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../PhoLinuxHelpers"
+		},
+		{
+			"path": "../PhoWindowsHelpers"
+		}
+	],
+	"settings": {
+		"workbench.colorCustomizations": {
+			"activityBar.background": "#2d1b4e",
+			"activityBar.foreground": "#e8d5ff",
+			"activityBar.inactiveForeground": "#9b7bb8",
+			"activityBarBadge.background": "#a855f7",
+			"activityBarBadge.foreground": "#ffffff",
+			"titleBar.activeBackground": "#3b0764",
+			"titleBar.activeForeground": "#f3e8ff",
+			"titleBar.inactiveBackground": "#2d1b4e",
+			"titleBar.inactiveForeground": "#c4b5d4",
+			"statusBar.background": "#3b0764",
+			"statusBar.foreground": "#f3e8ff",
+			"statusBar.noFolderBackground": "#3b0764",
+			"statusBarItem.remoteBackground": "#7c3aed",
+			"statusBarItem.remoteForeground": "#ffffff",
+			"tab.activeBorder": "#a855f7",
+			"focusBorder": "#a855f7",
+			"button.background": "#7c3aed",
+			"button.hoverBackground": "#8b5cf6",
+			"list.activeSelectionBackground": "#5b21b6aa",
+			"list.inactiveSelectionBackground": "#4c1d9580",
+			"list.hoverBackground": "#6b21a850"
+		}
+	}
+}
