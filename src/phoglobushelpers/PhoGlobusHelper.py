@@ -406,6 +406,119 @@ class GlobusConnector:
         return all_file_df
 
 
+    def get_greatlakes_temp_individual_posteriors_files(self, max_num_day_ago: int = 4, start_date=None, filter="name:~*.png", lab_Turbo_temp_individual_posteriors_bookmark: Optional[Bookmark]=None, max_depth: int=2,
+            relative_path: Optional[str] = None,  # e.g. "2026-09-16" or "2026-09-16/*/..." no — just a path segment
+        ):
+        """ Gets the log files produced by `gen_scripts` on Greatlakes
+        from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
+
+        all_log_file_df, most_recent_only_log_file_df = get_greatlakes_gen_scripts_log_files(connect_man)
+        most_recent_only_log_file_df
+        """
+        if lab_Turbo_temp_individual_posteriors_bookmark is None:
+            lab_Turbo_temp_individual_posteriors_bookmark = lab_Turbo_temp_individual_posteriors_bookmark = Bookmark(bookmark_id='b88204e2-b125-11f1-830f-0afff7074b21', name='Turbo _temp_individual_posteriors', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/figures/_temp_individual_posteriors/')
+
+        if start_date is None:
+            earliest_search_day_date = (datetime.now() - timedelta(days=max_num_day_ago)).date()
+            DAY_DATE_STR: str = earliest_search_day_date.strftime("%Y-%m-%d")
+            print(f'earliest_search_day_date: {DAY_DATE_STR}')
+            start_date = DAY_DATE_STR
+
+        if relative_path:
+            base = lab_Turbo_temp_individual_posteriors_bookmark.path.rstrip("/")
+            path = f"{base}/{relative_path.strip('/')}/"
+        else:
+            path = lab_Turbo_temp_individual_posteriors_bookmark.path
+
+
+        file_list: FileList = self.list_files(endpoint=lab_Turbo_temp_individual_posteriors_bookmark.endpoint_id,
+            # path=lab_Turbo_temp_individual_posteriors_bookmark.path,
+            path=path,  # was: bookmark.path
+            start_date=start_date, end_date=None, should_list_recursively=True, max_depth=max_depth, filter=filter)
+        all_file_df: pd.DataFrame = file_list.to_dataframe() #.columns
+        
+        # most_recent_only_file_df = get_only_most_recent_log_files(log_file_df=all_file_df)
+        return all_file_df
+
+
+
+    # @function_attributes(short_name=None, tags=['_temp_individual_posterior'], input_requires=[], output_provides=[], uses=['.get_greatlakes_temp_individual_posteriors_files'], used_by=[], creation_date='2026-09-16 09:05', related_items=[])
+    def build_all_sessions_temp_individual_posterior_files_dir(self, max_num_day_ago: int = 1, start_date=None, filter="name:~*.png", relative_path: str = "2026-09-16",
+        session_relative_desired_path: str = 'ripple/combined/multi',
+        lab_Turbo_temp_individual_posteriors_bookmark: Optional[Bookmark] = None,
+    ):
+        """
+            ## `session_relative_desired_path`: folder path to find files in and copy from relative to each session
+
+        Usage:
+
+            all_file_df, all_session_ripple_combined_multi_relative_paths_dict = connect_man.build_all_sessions_temp_individual_posterior_files_dir(relative_path="2026-09-16")
+            all_file_df
+
+            ## save .CSV
+            outputs_folder = Path('../EXTERNAL/outputs').resolve()
+            outputs_folder.mkdir(parents=True, exist_ok=True)
+            day_date = '2026-09-16'
+            csv_out_path = outputs_folder.joinpath(f'{day_date}_greatlakes_temp_individual_posteriors_image_files.csv').resolve()
+            # all_file_df.to_csv('greatlakes_collected_outputs_files.csv')
+            all_file_df.to_csv(csv_out_path)
+
+
+        """
+        ## Find the session folders (only top level, non-recurrsive) for today's export date on GL:
+        if lab_Turbo_temp_individual_posteriors_bookmark is None:
+            lab_Turbo_temp_individual_posteriors_bookmark = lab_Turbo_temp_individual_posteriors_bookmark = Bookmark(bookmark_id='b88204e2-b125-11f1-830f-0afff7074b21', name='Turbo _temp_individual_posteriors', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/figures/_temp_individual_posteriors/')
+
+        path = f"{lab_Turbo_temp_individual_posteriors_bookmark.path.rstrip('/')}/{relative_path.strip('/')}"
+
+        response = self.transfer_client.operation_ls(endpoint_id=lab_Turbo_temp_individual_posteriors_bookmark.endpoint_id, path=path, filter="type:dir")
+        all_session_folders_df = pd.DataFrame(response["DATA"])
+
+        ## Build the per-session paths for only the files of interest
+        ## INPUTS: session_relative_desired_path, all_session_folders_df
+        all_session_ripple_combined_multi_relative_paths = [f'{relative_path}/{a_sess_name}/{session_relative_desired_path}' for a_sess_name in all_session_folders_df['name']]
+        all_session_ripple_combined_multi_relative_paths_dict = dict(zip(all_session_folders_df['name'], all_session_ripple_combined_multi_relative_paths))
+
+        # all_session_ripple_combined_multi_relative_paths = ['2026-09-16/gor01_one_2006-6-08_14-26-15/ripple/combined/multi',
+        # ...
+        #     '2026-09-16/vvp01_two_2006-4-09_16-40-54/ripple/combined/multi',
+        #     '2026-09-16/vvp01_two_2006-4-10_12-58-3/ripple/combined/multi']
+
+        # all_session_ripple_combined_multi_relative_paths_dict = {'gor01_one_2006-6-08_14-26-15': '2026-09-16/gor01_one_2006-6-08_14-26-15/ripple/combined/multi',
+        #     'gor01_one_2006-6-09_1-22-43': '2026-09-16/gor01_one_2006-6-09_1-22-43/ripple/combined/multi',
+        #     'gor01_one_2006-6-12_15-55-31': '2026-09-16/gor01_one_2006-6-12_15-55-31/ripple/combined/multi',
+        #     'gor01_two_2006-6-07_16-40-19': '2026-09-16/gor01_two_2006-6-07_16-40-19/ripple/combined/multi',
+        #     'gor01_two_2006-6-08_21-16-25': '2026-09-16/gor01_two_2006-6-08_21-16-25/ripple/combined/multi',
+        #     'gor01_two_2006-6-09_22-24-40': '2026-09-16/gor01_two_2006-6-09_22-24-40/ripple/combined/multi',
+        #     'gor01_two_2006-6-12_16-53-46': '2026-09-16/gor01_two_2006-6-12_16-53-46/ripple/combined/multi',
+        #     'pin01_one_11-02_17-46-44': '2026-09-16/pin01_one_11-02_17-46-44/ripple/combined/multi',
+        #     'pin01_one_11-03_12-3-25': '2026-09-16/pin01_one_11-03_12-3-25/ripple/combined/multi',
+        #     'pin01_one_fet11-01_12-58-54': '2026-09-16/pin01_one_fet11-01_12-58-54/ripple/combined/multi',
+        #     'vvp01_two_2006-4-09_16-40-54': '2026-09-16/vvp01_two_2006-4-09_16-40-54/ripple/combined/multi',
+        #     'vvp01_two_2006-4-10_12-58-3': '2026-09-16/vvp01_two_2006-4-10_12-58-3/ripple/combined/multi',
+        # }
+
+        ## OUTPUTS: all_session_ripple_combined_multi_relative_paths_dict
+
+        ## for each session folder path, search for the .png files of interest
+        ## INPUTS: all_session_ripple_combined_multi_relative_paths_dict
+        all_file_df = []
+        # for a_session_rel_path in all_session_ripple_combined_multi_relative_paths:
+        for a_sess_name, a_session_rel_path in all_session_ripple_combined_multi_relative_paths_dict.items():
+            an_all_file_df: pd.DataFrame = self.get_greatlakes_temp_individual_posteriors_files(max_num_day_ago=max_num_day_ago, start_date=start_date, filter=filter, max_depth=0,
+                    relative_path=a_session_rel_path, # like '2026-09-16/gor01_one_2006-6-12_15-55-31/ripple/combined/multi'
+                    lab_Turbo_temp_individual_posteriors_bookmark=lab_Turbo_temp_individual_posteriors_bookmark,
+                )
+            an_all_file_df['sess'] = a_sess_name
+            all_file_df.append(an_all_file_df)
+
+        all_file_df = pd.concat(all_file_df, ignore_index=True)
+        ## OUTPUTS: all_file_df
+        return all_file_df, all_session_ripple_combined_multi_relative_paths_dict
+
+
+
+
     # def perform_copy_files(active_file_df: pd.DataFrame, transfer_label: str, synchronous_wait:bool=True):
     def perform_copy_files(self, active_file_df: pd.DataFrame, transfer:TransferRequest, synchronous_wait:bool=True):
         """ performs the copy files action between two sources
