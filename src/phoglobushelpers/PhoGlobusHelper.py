@@ -363,7 +363,7 @@ class GlobusConnector:
         return True
         
 
-    def get_greatlakes_gen_scripts_log_files(self, max_num_day_ago: int = 4, start_date=None):
+    def get_greatlakes_gen_scripts_log_files(self, max_num_day_ago: int = 4, start_date=None, n_most_recent_files: int = 1, **kwargs):
         """ Gets the log files produced by `gen_scripts` on Greatlakes
         from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
 
@@ -377,10 +377,10 @@ class GlobusConnector:
             start_date = DAY_DATE_STR
             
         lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
-        log_file_list: FileList = self.list_files(endpoint=lab_Greatlakes_gen_scripts.endpoint_id, path=lab_Greatlakes_gen_scripts.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=1, filter="name:~*.log,~*.err")
+        log_file_list: FileList = self.list_files(endpoint=lab_Greatlakes_gen_scripts.endpoint_id, path=lab_Greatlakes_gen_scripts.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=1, filter="name:~*.log,~*.err,~*.out")
         all_log_file_df: pd.DataFrame = log_file_list.to_dataframe() #.columns
         
-        most_recent_only_log_file_df = get_only_most_recent_log_files(log_file_df=all_log_file_df)
+        most_recent_only_log_file_df = get_only_most_recent_log_files(log_file_df=all_log_file_df, n_most_recent_files=n_most_recent_files, **kwargs)
         return all_log_file_df, most_recent_only_log_file_df
     
 
