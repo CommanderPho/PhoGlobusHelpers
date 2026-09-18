@@ -416,7 +416,7 @@ class GlobusConnector:
         most_recent_only_log_file_df
         """
         if lab_Turbo_temp_individual_posteriors_bookmark is None:
-            lab_Turbo_temp_individual_posteriors_bookmark = lab_Turbo_temp_individual_posteriors_bookmark = Bookmark(bookmark_id='b88204e2-b125-11f1-830f-0afff7074b21', name='Turbo _temp_individual_posteriors', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/figures/_temp_individual_posteriors/')
+            lab_Turbo_temp_individual_posteriors_bookmark = Bookmark(bookmark_id='b88204e2-b125-11f1-830f-0afff7074b21', name='Turbo _temp_individual_posteriors', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/figures/_temp_individual_posteriors/')
 
         if start_date is None:
             earliest_search_day_date = (datetime.now() - timedelta(days=max_num_day_ago)).date()
