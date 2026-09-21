@@ -1,6 +1,6 @@
 [project]
 name = "phoglobushelpers"
-version = "0.2.3"
+version = "0.2.4"
 description = "A series of helpers to help the lab with Globus Endpoint related tasks"
 authors = [{ name = "Pho Hale", email = "PhoHale@gmail.com" }]
 requires-python = ">=3.9,<3.12"

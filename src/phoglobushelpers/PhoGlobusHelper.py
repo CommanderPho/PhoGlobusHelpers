@@ -3,7 +3,7 @@ import time
 from copy import deepcopy
 from collections import deque
 from datetime import datetime, date, timedelta
-from typing import Any, List, Optional, Dict, Union
+from typing import Any, List, NoReturn, Optional, Dict, Union
 from globus_sdk.response import GlobusHTTPResponse
 import pandas as pd
 import globus_sdk
@@ -19,6 +19,14 @@ from phoglobushelpers.path_helpers import build_globus_web_filemanager_url, pars
 
 
 TransferFilterDict = Dict[str, Union[str, List[str]]]
+
+
+def _reraise_transfer_api_error(err: TransferAPIError) -> NoReturn:
+    """Re-raise TransferAPIError as a short human-readable exception (no SDK chain)."""
+    msg = err.message or str(err)
+    if err.http_status == 404 or err.code == "ClientError.NotFound":
+        raise FileNotFoundError(msg) from None
+    raise RuntimeError(msg) from None
 
 
 class KnownEndpoints:
@@ -297,7 +305,7 @@ class GlobusConnector:
             )
         except globus_sdk.TransferAPIError as err:
             if not err.info.consent_required:
-                raise
+                _reraise_transfer_api_error(err)
 
             print("Encountered a ConsentRequired error.\nYou must login a second time to grant consents.\n\n")
             print(f'required scopes:\n{err.info.consent_required.required_scopes}\n')
@@ -471,7 +479,12 @@ class GlobusConnector:
 
         path = f"{lab_Turbo_temp_individual_posteriors_bookmark.path.rstrip('/')}/{relative_path.strip('/')}"
 
-        response = self.transfer_client.operation_ls(endpoint_id=lab_Turbo_temp_individual_posteriors_bookmark.endpoint_id, path=path, filter="type:dir")
+        try:
+            response = self.transfer_client.operation_ls(endpoint_id=lab_Turbo_temp_individual_posteriors_bookmark.endpoint_id, path=path, filter="type:dir")
+        except TransferAPIError as err:
+            if err.info.consent_required:
+                raise
+            _reraise_transfer_api_error(err)
         all_session_folders_df = pd.DataFrame(response["DATA"])
 
         ## Build the per-session paths for only the files of interest
@@ -479,38 +492,25 @@ class GlobusConnector:
         all_session_ripple_combined_multi_relative_paths = [f'{relative_path}/{a_sess_name}/{session_relative_desired_path}' for a_sess_name in all_session_folders_df['name']]
         all_session_ripple_combined_multi_relative_paths_dict = dict(zip(all_session_folders_df['name'], all_session_ripple_combined_multi_relative_paths))
 
-        # all_session_ripple_combined_multi_relative_paths = ['2026-09-16/gor01_one_2006-6-08_14-26-15/ripple/combined/multi',
-        # ...
-        #     '2026-09-16/vvp01_two_2006-4-09_16-40-54/ripple/combined/multi',
-        #     '2026-09-16/vvp01_two_2006-4-10_12-58-3/ripple/combined/multi']
-
-        # all_session_ripple_combined_multi_relative_paths_dict = {'gor01_one_2006-6-08_14-26-15': '2026-09-16/gor01_one_2006-6-08_14-26-15/ripple/combined/multi',
-        #     'gor01_one_2006-6-09_1-22-43': '2026-09-16/gor01_one_2006-6-09_1-22-43/ripple/combined/multi',
-        #     'gor01_one_2006-6-12_15-55-31': '2026-09-16/gor01_one_2006-6-12_15-55-31/ripple/combined/multi',
-        #     'gor01_two_2006-6-07_16-40-19': '2026-09-16/gor01_two_2006-6-07_16-40-19/ripple/combined/multi',
-        #     'gor01_two_2006-6-08_21-16-25': '2026-09-16/gor01_two_2006-6-08_21-16-25/ripple/combined/multi',
-        #     'gor01_two_2006-6-09_22-24-40': '2026-09-16/gor01_two_2006-6-09_22-24-40/ripple/combined/multi',
-        #     'gor01_two_2006-6-12_16-53-46': '2026-09-16/gor01_two_2006-6-12_16-53-46/ripple/combined/multi',
-        #     'pin01_one_11-02_17-46-44': '2026-09-16/pin01_one_11-02_17-46-44/ripple/combined/multi',
-        #     'pin01_one_11-03_12-3-25': '2026-09-16/pin01_one_11-03_12-3-25/ripple/combined/multi',
-        #     'pin01_one_fet11-01_12-58-54': '2026-09-16/pin01_one_fet11-01_12-58-54/ripple/combined/multi',
-        #     'vvp01_two_2006-4-09_16-40-54': '2026-09-16/vvp01_two_2006-4-09_16-40-54/ripple/combined/multi',
-        #     'vvp01_two_2006-4-10_12-58-3': '2026-09-16/vvp01_two_2006-4-10_12-58-3/ripple/combined/multi',
-        # }
-
         ## OUTPUTS: all_session_ripple_combined_multi_relative_paths_dict
 
         ## for each session folder path, search for the .png files of interest
         ## INPUTS: all_session_ripple_combined_multi_relative_paths_dict
         all_file_df = []
-        # for a_session_rel_path in all_session_ripple_combined_multi_relative_paths:
         for a_sess_name, a_session_rel_path in all_session_ripple_combined_multi_relative_paths_dict.items():
-            an_all_file_df: pd.DataFrame = self.get_greatlakes_temp_individual_posteriors_files(max_num_day_ago=max_num_day_ago, start_date=start_date, filter=filter, max_depth=0,
-                    relative_path=a_session_rel_path, # like '2026-09-16/gor01_one_2006-6-12_15-55-31/ripple/combined/multi'
-                    lab_Turbo_temp_individual_posteriors_bookmark=lab_Turbo_temp_individual_posteriors_bookmark,
-                )
+            try:
+                an_all_file_df: pd.DataFrame = self.get_greatlakes_temp_individual_posteriors_files(max_num_day_ago=max_num_day_ago, start_date=start_date, filter=filter, max_depth=0,
+                        relative_path=a_session_rel_path, # like '2026-09-16/gor01_one_2006-6-12_15-55-31/ripple/combined/multi'
+                        lab_Turbo_temp_individual_posteriors_bookmark=lab_Turbo_temp_individual_posteriors_bookmark,
+                    )
+            except FileNotFoundError as err:
+                print(f"WARNING: skipping session '{a_sess_name}': {err}")
+                continue
             an_all_file_df['sess'] = a_sess_name
             all_file_df.append(an_all_file_df)
+
+        if not all_file_df:
+            return pd.DataFrame(), all_session_ripple_combined_multi_relative_paths_dict
 
         all_file_df = pd.concat(all_file_df, ignore_index=True)
         ## OUTPUTS: all_file_df
