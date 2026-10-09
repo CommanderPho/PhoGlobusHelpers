@@ -144,6 +144,16 @@ class FileList:
             data_dict["link_user"] = [file.link_user for file in self.DATA]
 
         df = pd.DataFrame(data_dict)
+        # Empty list columns otherwise become float64, which breaks .str accessors later.
+        if df.empty:
+            string_cols = [c for c in ('type', 'parent_path', 'name', 'last_modified',
+                                       'permissions', 'user', 'group',
+                                       'link_group', 'link_last_modified', 'link_size',
+                                       'link_target', 'link_user') if c in df.columns]
+            for col in string_cols:
+                df[col] = df[col].astype('object')
+            if 'size' in df.columns:
+                df['size'] = df['size'].astype('Int64')
         return df
 
     def build_file_paths(self) -> List[str]:
@@ -165,7 +175,12 @@ def get_only_most_recent_log_files(log_file_df: pd.DataFrame, n_most_recent_file
 
     """
     df = deepcopy(log_file_df)
+    if df.empty:
+        return df.copy()
+
     df['last_modified'] = pd.to_datetime(df['last_modified'])
+    # Coerce in case an empty upstream frame left `name` as float64.
+    df['name'] = df['name'].astype(str)
 
     parts = []
     for suffix in ('.err', '.log', '.out'):

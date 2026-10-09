@@ -517,6 +517,22 @@ class GlobusConnector:
         return all_file_df, all_session_ripple_combined_multi_relative_paths_dict
 
 
+    def build_copy_path_df(self, active_file_df: pd.DataFrame, transfer: TransferRequest) -> pd.DataFrame:
+        """Build a DataFrame of source/dest paths that would be transferred.
+
+        Returns a copy of `active_file_df` with `source_path` and `dest_path` columns
+        prepended (dest paths replace `transfer.source_endpoint_path` with
+        `transfer.dest_path_root` once).
+
+        Usage:
+            transfer_path_df = connect_man.build_copy_path_df(active_file_df, transfer=gen_scripts_GL_to_Apogee)
+        """
+        path_df = active_file_df.copy()
+        source_paths = [str(Path(row.parent_path).joinpath(row.name).as_posix()) for row in path_df.itertuples(name='LogFile')]
+        dest_paths = [src.replace(transfer.source_endpoint_path, transfer.dest_path_root, 1) for src in source_paths]
+        path_df.insert(0, 'source_path', source_paths)
+        path_df.insert(1, 'dest_path', dest_paths)
+        return path_df
 
 
     # def perform_copy_files(active_file_df: pd.DataFrame, transfer_label: str, synchronous_wait:bool=True):
