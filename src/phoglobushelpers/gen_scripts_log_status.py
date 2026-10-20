@@ -83,6 +83,19 @@ def _err_has_traceback(err_path: Optional[Path]) -> bool:
         return False
 
 
+def _format_log_mtime(log_mtime) -> str:
+    """Compact UTC timestamp for accordion titles; ``?`` when missing."""
+    if log_mtime is None or (isinstance(log_mtime, float) and pd.isna(log_mtime)):
+        return "?"
+    try:
+        ts = pd.to_datetime(log_mtime, utc=True)
+        if pd.isna(ts):
+            return "?"
+        return ts.strftime("%Y-%m-%d %H:%M UTC")
+    except (TypeError, ValueError):
+        return "?"
+
+
 def read_log_tail(path: PathLike, n_lines: int = 80) -> str:
     """Return the last ``n_lines`` of a text file (UTF-8, replace errors)."""
     p = Path(path)
@@ -199,11 +212,13 @@ def show_session_log_browser(
     status_df = build_session_status_df(file_df, n_most_recent_files=n_most_recent_files)
     display(status_df)
 
+    # Accordion order matches status_df (newest log_mtime first).
+    with_log = status_df[status_df["log_path"].notna()].copy()
+    with_log = with_log.sort_values(by=["log_mtime"], ascending=False, na_position="last")
+
     children = []
     titles = []
-    for row in status_df.itertuples(index=False):
-        if not row.log_path:
-            continue
+    for row in with_log.itertuples(index=False):
         tail = read_log_tail(row.log_path, n_lines=n_tail_lines)
         header = (
             f"{row.log_name}\n"
@@ -218,8 +233,9 @@ def show_session_log_browser(
                 disabled=True,
             )
         )
-        titles.append(f"[{row.status}] {row.session}")
-    ## END for row in status_df.itertuples(index=False)....
+        mtime_str = _format_log_mtime(row.log_mtime)
+        titles.append(f"[{row.status}] {row.session}  ·  {mtime_str}")
+    ## END for row in with_log.itertuples(index=False)....
 
     if children:
         accordion = widgets.Accordion(children=children)
