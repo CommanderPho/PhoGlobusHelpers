@@ -5,6 +5,7 @@ and optionally shows an inline Jupyter Accordion with recent log tails per sessi
 """
 from __future__ import annotations
 
+import html
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Union
@@ -163,6 +164,52 @@ def resolve_cutoff_date(
     return now - timedelta(days=int(max_num_day_ago))
 
 
+def apply_remote_mtime_overrides(
+    local_file_df: pd.DataFrame,
+    override_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Overlay Globus ``last_modified`` onto local rows matched by session folder + name.
+
+    Match key is ``(Path(parent_path).name, name)`` so remote paths like
+    ``/umms-kdiba/.../gen_scripts/run_X`` align with local ``K:/scratch/gen_scripts/run_X``.
+
+    Adds boolean column ``_mtime_overridden``. Unmatched local rows keep their
+    filesystem ``last_modified``. Local ``parent_path`` / ``size`` are preserved.
+    """
+    if local_file_df is None or local_file_df.empty:
+        cols = ["type", "parent_path", "name", "last_modified", "size", "_mtime_overridden"]
+        if local_file_df is None:
+            return pd.DataFrame(columns=cols)
+        out = local_file_df.copy()
+        out["_mtime_overridden"] = pd.Series(dtype=bool)
+        return out
+
+    out = local_file_df.copy()
+    out["_mtime_overridden"] = False
+    if override_df is None or override_df.empty:
+        return out
+
+    override = override_df.copy()
+    override["session"] = override["parent_path"].map(lambda p: Path(str(p)).name)
+    override["name"] = override["name"].astype(str)
+    override["last_modified"] = pd.to_datetime(override["last_modified"], utc=True)
+    # Last duplicate wins if override has repeated (session, name).
+    mtime_map = (
+        override.drop_duplicates(subset=["session", "name"], keep="last")
+        .set_index(["session", "name"])["last_modified"]
+    )
+
+    out["session"] = out["parent_path"].map(lambda p: Path(str(p)).name)
+    out["name"] = out["name"].astype(str)
+    keys = list(zip(out["session"], out["name"]))
+    mapped = pd.Series(keys, index=out.index).map(mtime_map)
+    hit = mapped.notna()
+    out.loc[hit, "last_modified"] = mapped.loc[hit]
+    out.loc[hit, "_mtime_overridden"] = True
+    out = out.drop(columns=["session"])
+    return out
+
+
 def select_recent_logs_by_session(
     file_df: pd.DataFrame,
     most_recent_n_logs: int = 3,
@@ -313,12 +360,18 @@ def show_session_log_browser(
     cutoff_date: Optional[DateLike] = None,
     max_num_day_ago: Optional[int] = 4,
     n_most_recent_files: int = 1,
+    most_recent_only_log_file_df: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """Display status table + Accordion of recent log tails (one section per session).
 
     Each session section shows up to ``most_recent_n_logs`` ``.log`` tails whose
     ``last_modified`` is newer than ``cutoff_date`` (default: ``max_num_day_ago``
     days before now). Sessions are ordered by newest log mtime.
+
+    When ``most_recent_only_log_file_df`` is provided (e.g. Globus listing), its
+    ``last_modified`` values overlay local filesystem mtimes matched by session
+    folder + filename. Only matched rows are kept for status/selection so stale
+    copy mtimes cannot win. Log contents still come from local paths under ``root``.
 
     Returns the session status DataFrame. Requires ipywidgets in the Jupyter kernel.
     """
@@ -334,6 +387,11 @@ def show_session_log_browser(
         cutoff_date=cutoff_date, max_num_day_ago=max_num_day_ago
     )
     file_df = list_local_gen_scripts_files(root_path)
+    if most_recent_only_log_file_df is not None:
+        file_df = apply_remote_mtime_overrides(file_df, most_recent_only_log_file_df)
+        if not file_df.empty:
+            file_df = file_df[file_df["_mtime_overridden"]].copy()
+        file_df = file_df.drop(columns=["_mtime_overridden"], errors="ignore")
     status_df = build_session_status_df(file_df, n_most_recent_files=n_most_recent_files)
 
     recent_logs = select_recent_logs_by_session(
@@ -364,33 +422,42 @@ def show_session_log_browser(
         )
         for parent_path in session_order.index:
             session_logs = recent_logs[recent_logs["parent_path"] == parent_path]
-            blocks = []
+            log_panels = []
             for log_row in session_logs.itertuples(index=False):
                 tail = read_log_tail(log_row.log_path, n_lines=n_tail_lines)
-                blocks.append(
-                    f"{log_row.name}\n"
-                    f"size={log_row.size}  mtime={log_row.last_modified}\n"
-                    f"{log_row.log_path}\n"
-                    f"{'-' * 72}\n"
-                    f"{tail}"
+                mtime_str = _format_log_mtime(log_row.last_modified)
+                header = widgets.HTML(
+                    value=(
+                        f"<div style='font-weight:600; margin:4px 0 2px 0;'>"
+                        f"{html.escape(str(log_row.name))}</div>"
+                        f"<div style='font-size:0.85em; opacity:0.8; margin-bottom:4px;'>"
+                        f"size={log_row.size}  ·  {html.escape(mtime_str)}<br/>"
+                        f"<code>{html.escape(str(log_row.log_path))}</code>"
+                        f"</div>"
+                    )
                 )
+                textarea = widgets.Textarea(
+                    value=tail,
+                    layout=widgets.Layout(width="100%", height="280px"),
+                    disabled=True,
+                )
+                textarea.add_class("gen-scripts-log-textarea")
+                log_panels.append(widgets.VBox([header, textarea]))
             ## END for log_row in session_logs.itertuples(index=False)....
 
-            n_shown = len(blocks)
-            height_px = min(720, 280 + max(0, n_shown - 1) * 200)
-            textarea = widgets.Textarea(
-                value=("\n\n" + ("=" * 72) + "\n\n").join(blocks),
-                layout=widgets.Layout(width="100%", height=f"{height_px}px"),
-                disabled=True,
+            n_shown = len(log_panels)
+            children.append(
+                widgets.VBox(
+                    log_panels,
+                    layout=widgets.Layout(width="100%"),
+                )
             )
-            textarea.add_class("gen-scripts-log-textarea")
-            children.append(textarea)
             session_name = Path(parent_path).name
             status = status_by_parent.get(parent_path, "?")
             newest_mtime = session_order.loc[parent_path]
-            mtime_str = _format_log_mtime(newest_mtime)
+            newest_str = _format_log_mtime(newest_mtime)
             titles.append(
-                f"[{status}] {session_name}  ·  {mtime_str}  ·  {n_shown} log(s)"
+                f"[{status}] {session_name}  ·  {newest_str}  ·  {n_shown} log(s)"
             )
         ## END for parent_path in session_order.index....
 

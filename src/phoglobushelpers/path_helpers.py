@@ -4,7 +4,7 @@ import platform
 from contextlib import contextmanager
 import pathlib
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 import shutil # for _backup_extant_file(...)
 from datetime import datetime
 import pandas as pd
@@ -145,9 +145,85 @@ def get_file_metadata(paths) -> pd.DataFrame:
                 'creation_time': datetime.fromtimestamp(created_time),
                 'file_size': file_size
             })
+    ## END for path in paths....
 
     df = pd.DataFrame(metadata)
     return df
+
+
+def globus_dest_path_to_local(dest_path: str) -> Path:
+    """Map a Globus endpoint path like `/K/scratch/...` to a local Windows path `K:/scratch/...`.
+
+    Non-drive Globus paths (e.g. `/home/...`) are returned unchanged as Path.
+    """
+    posix = str(dest_path).replace("\\", "/")
+    if len(posix) >= 3 and posix.startswith("/") and posix[2] == "/":
+        drive = posix[1]
+        if drive.isalpha():
+            return Path(f"{drive.upper()}:{posix[2:]}")
+    return Path(posix)
+
+
+def apply_local_file_timestamps(
+    path_df: pd.DataFrame,
+    dest_col: str = "dest_path",
+    mtime_col: str = "last_modified",
+    set_creation_time: bool = True,
+) -> Dict[str, int]:
+    """Set local mtime (and Windows creation time) from a transfer path DataFrame.
+
+    Expects columns produced by ``GlobusConnector.build_copy_path_df`` /
+    ``perform_copy_files``: ``dest_path`` (Globus-style) and ``last_modified``.
+
+    Maps ``/K/...`` → ``K:/...``, skips missing files (async transfers), sets
+    mtime via ``os.utime``, and on Windows optionally sets creation time via
+    ``win32_setctime`` when available.
+
+    Usage:
+        from phoglobushelpers.path_helpers import apply_local_file_timestamps
+
+        transfer_path_df = connect_man.perform_copy_files(...)
+        # after transfer completes:
+        apply_local_file_timestamps(transfer_path_df)
+
+    Returns:
+        Counts dict with keys: applied, missing, errors.
+    """
+    setctime = None
+    if set_creation_time and platform.system() == "Windows":
+        try:
+            from win32_setctime import setctime as _setctime
+            setctime = _setctime
+        except ImportError:
+            print("win32_setctime not installed; skipping Windows creation time")
+
+    counts = {"applied": 0, "missing": 0, "errors": 0}
+    for row in path_df.itertuples(index=False):
+        dest_raw = getattr(row, dest_col, None)
+        mtime_raw = getattr(row, mtime_col, None)
+        if dest_raw is None or mtime_raw is None or (isinstance(mtime_raw, float) and pd.isna(mtime_raw)):
+            counts["errors"] += 1
+            continue
+        local_path = globus_dest_path_to_local(dest_raw)
+        if not local_path.is_file():
+            counts["missing"] += 1
+            continue
+        try:
+            ts = pd.to_datetime(mtime_raw, utc=True).timestamp()
+            os.utime(local_path, (ts, ts))
+            if setctime is not None:
+                setctime(str(local_path), ts)
+            counts["applied"] += 1
+        except OSError as err:
+            print(f"Failed to set timestamps on {local_path}: {err}")
+            counts["errors"] += 1
+    ## END for row in path_df.itertuples(index=False)....
+
+    print(
+        f"apply_local_file_timestamps: applied={counts['applied']} "
+        f"missing={counts['missing']} errors={counts['errors']}"
+    )
+    return counts
 
 
 

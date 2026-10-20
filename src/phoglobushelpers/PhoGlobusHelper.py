@@ -14,7 +14,11 @@ from attrs import define, field, Factory
 from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
 from phoglobushelpers.compatibility_objects.Files import File, FilesystemDataType, FileList, get_only_most_recent_log_files
 from phoglobushelpers.compatibility_objects.Tasks import FatalError, Task, TaskList
-from phoglobushelpers.path_helpers import build_globus_web_filemanager_url, parse_globus_filemanager_url
+from phoglobushelpers.path_helpers import (
+    apply_local_file_timestamps,
+    build_globus_web_filemanager_url,
+    parse_globus_filemanager_url,
+)
 
 
 
@@ -166,7 +170,7 @@ class GlobusConnector:
         return tasks_list
 
 
-    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List[str], filelist_dest:List[str], label: str = "Batch Transfer", batch_size: int = 1000, synchronous_wait:bool=False, max_single_file_wait_time_seconds=60):
+    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List[str], filelist_dest:List[str], label: str = "Batch Transfer", batch_size: int = 1000, synchronous_wait:bool=False, max_single_file_wait_time_seconds=60, preserve_timestamp: bool = True):
         """ performs a batch transfer for the files specified in the filelists from source to endpoint.
         # Set your source and destination endpoint IDs
         # source_endpoint = "SOURCE_ENDPOINT_ID"
@@ -203,9 +207,9 @@ class GlobusConnector:
         pending_tasks = {}
         transfer_client: TransferClient = self.transfer_client
 
-        # Set your transfer options
+        # Set your transfer options (preserve_timestamp sets dest mtime to match source; works Unix→Windows)
         transfer_options = {
-            # "preserve_timestamp": True
+            "preserve_timestamp": preserve_timestamp,
         }
 
         # Turn them all into strings
@@ -535,33 +539,53 @@ class GlobusConnector:
         return path_df
 
 
-    # def perform_copy_files(active_file_df: pd.DataFrame, transfer_label: str, synchronous_wait:bool=True):
-    def perform_copy_files(self, active_file_df: pd.DataFrame, transfer:TransferRequest, synchronous_wait:bool=True):
-        """ performs the copy files action between two sources
+    def perform_copy_files(
+        self,
+        active_file_df: pd.DataFrame,
+        transfer: TransferRequest,
+        synchronous_wait: bool = True,
+        preserve_timestamp: bool = True,
+        dry_run: bool = False,
+    ) -> pd.DataFrame:
+        """Copy files between endpoints; return source/dest path DataFrame.
 
+        `preserve_timestamp=True` asks Globus to set dest mtime to match source
+        (works Unix→Windows). For Windows creation (birth) time after files land
+        locally, call `apply_local_file_timestamps(transfer_path_df)`.
+
+        Usage:
+            transfer_path_df = connect_man.perform_copy_files(
+                active_file_df=active_file_df,
+                transfer=gen_scripts_GL_to_Apogee,
+                synchronous_wait=False,
+                preserve_timestamp=True,
+            )
+            # Preview only:
+            transfer_path_df = connect_man.perform_copy_files(..., dry_run=True)
         """
-        ## INPUTS: all_file_df
-        active_file_paths: List[Path] = [Path(row.parent_path).joinpath(row.name) for row in active_file_df.itertuples(name='LogFile')]
+        path_df = self.build_copy_path_df(active_file_df, transfer)
+        if dry_run:
+            return path_df
 
-        endpoint_relative_src_lines: List[str] = [str(a_line.as_posix()) for a_line in active_file_paths]
-        endpoint_relative_dest_lines: List[str] = [a_line.replace(transfer.source_endpoint_path, transfer.dest_path_root, 1) for a_line in endpoint_relative_src_lines]
+        self.batch_transfer_files(
+            source_endpoint=transfer.source_endpoint.endpoint_id,
+            destination_endpoint=transfer.dest_endpoint.endpoint_id,
+            filelist_source=path_df["source_path"].tolist(),
+            filelist_dest=path_df["dest_path"].tolist(),
+            synchronous_wait=synchronous_wait,
+            label=transfer.transfer_label,
+            preserve_timestamp=preserve_timestamp,
+        )
+        return path_df
 
-        ## INPUTS: src_lines, dest_lines, apogee_gen_scripts_folder_bookmark, lab_Greatlakes_gen_scripts
-        return self.batch_transfer_files(source_endpoint=transfer.source_endpoint.endpoint_id, destination_endpoint=transfer.dest_endpoint.endpoint_id,
-                                                                                            filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines,
-                                                                                            synchronous_wait=synchronous_wait, label=transfer.transfer_label)
-        
-        # if synchronous_wait:
-        # 	# Synchronously wait for transfer to complete
-        # 	pending_tasks, (completed_tasks, failed_tasks) = connect_man.batch_transfer_files(source_endpoint=transfer.source_endpoint.endpoint_id, destination_endpoint=transfer.dest_endpoint.endpoint_id,
-        # 																					filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines,
-        # 																					synchronous_wait=True, label=transfer.transfer_label)
-        # 	return completed_tasks
-        # else:
-        # 	# ## Async:
-        # 	return connect_man.batch_transfer_files(source_endpoint=source_endpoint.endpoint_id, destination_endpoint=dest_endpoint.endpoint_id, filelist_source=endpoint_relative_src_lines, filelist_dest=endpoint_relative_dest_lines,
-        # 																					synchronous_wait=False, label=transfer_label)
-        
+
+    def apply_local_file_timestamps(self, path_df: pd.DataFrame, set_creation_time: bool = True) -> Dict[str, int]:
+        """Post-hoc set local mtime / Windows creation time from a transfer path DataFrame.
+
+        Call after files have landed on a local path (e.g. `K:/...`). See
+        `phoglobushelpers.path_helpers.apply_local_file_timestamps`.
+        """
+        return apply_local_file_timestamps(path_df, set_creation_time=set_creation_time)
 
 
     @classmethod
