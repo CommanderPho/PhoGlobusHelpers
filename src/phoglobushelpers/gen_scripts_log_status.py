@@ -10,9 +10,41 @@ from pathlib import Path
 from typing import Optional, Union
 
 import pandas as pd
-from IPython.display import display
+from IPython.display import HTML, display
 
 from phoglobushelpers.compatibility_objects.Files import get_only_most_recent_log_files
+
+# Keep log Textarea lines unwrapped; scroll horizontally instead.
+_LOG_TEXTAREA_NOWRAP_HTML = """
+<style>
+.gen-scripts-log-textarea textarea {
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-wrap: normal !important;
+  word-break: normal !important;
+  overflow-x: auto !important;
+}
+</style>
+<script>
+(function () {
+  if (window.__genScriptsLogTextareaWrapOff) { return; }
+  window.__genScriptsLogTextareaWrapOff = true;
+  function applyWrapOff() {
+    document.querySelectorAll('.gen-scripts-log-textarea textarea').forEach(function (el) {
+      if (el.getAttribute('wrap') !== 'off') {
+        el.setAttribute('wrap', 'off');
+      }
+    });
+  }
+  applyWrapOff();
+  new MutationObserver(applyWrapOff).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+})();
+</script>
+"""
+_LOG_TEXTAREA_NOWRAP_DISPLAYED = False
 
 PathLike = Union[str, Path]
 DateLike = Union[str, date, datetime]
@@ -292,6 +324,11 @@ def show_session_log_browser(
     """
     import ipywidgets as widgets
 
+    global _LOG_TEXTAREA_NOWRAP_DISPLAYED
+    if not _LOG_TEXTAREA_NOWRAP_DISPLAYED:
+        display(HTML(_LOG_TEXTAREA_NOWRAP_HTML))
+        _LOG_TEXTAREA_NOWRAP_DISPLAYED = True
+
     root_path = Path(root)
     resolved_cutoff = resolve_cutoff_date(
         cutoff_date=cutoff_date, max_num_day_ago=max_num_day_ago
@@ -341,13 +378,13 @@ def show_session_log_browser(
 
             n_shown = len(blocks)
             height_px = min(720, 280 + max(0, n_shown - 1) * 200)
-            children.append(
-                widgets.Textarea(
-                    value=("\n\n" + ("=" * 72) + "\n\n").join(blocks),
-                    layout=widgets.Layout(width="100%", height=f"{height_px}px"),
-                    disabled=True,
-                )
+            textarea = widgets.Textarea(
+                value=("\n\n" + ("=" * 72) + "\n\n").join(blocks),
+                layout=widgets.Layout(width="100%", height=f"{height_px}px"),
+                disabled=True,
             )
+            textarea.add_class("gen-scripts-log-textarea")
+            children.append(textarea)
             session_name = Path(parent_path).name
             status = status_by_parent.get(parent_path, "?")
             newest_mtime = session_order.loc[parent_path]
