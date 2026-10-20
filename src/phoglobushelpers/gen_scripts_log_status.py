@@ -1,11 +1,11 @@
 """Local gen_scripts run-log status helpers for K:/scratch/gen_scripts (and similar).
 
 Lists newest .log/.err/.out per session folder, classifies Running/Finished/etc.,
-and optionally shows an inline Jupyter Accordion with one latest-log tail per session.
+and optionally shows an inline Jupyter Accordion with recent log tails per session.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Union
 
@@ -15,6 +15,7 @@ from IPython.display import display
 from phoglobushelpers.compatibility_objects.Files import get_only_most_recent_log_files
 
 PathLike = Union[str, Path]
+DateLike = Union[str, date, datetime]
 
 # Heuristic thresholds (local sync snapshot only).
 _FINISHED_OUT_SIZE: int = 1800
@@ -94,6 +95,83 @@ def _format_log_mtime(log_mtime) -> str:
         return ts.strftime("%Y-%m-%d %H:%M UTC")
     except (TypeError, ValueError):
         return "?"
+
+
+def _coerce_utc_datetime(value: Optional[DateLike]) -> Optional[datetime]:
+    """Normalize date/datetime/str to timezone-aware UTC datetime (or None)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    ts = pd.to_datetime(value, utc=True)
+    if pd.isna(ts):
+        return None
+    return ts.to_pydatetime()
+
+
+def resolve_cutoff_date(
+    cutoff_date: Optional[DateLike] = None,
+    max_num_day_ago: Optional[int] = 4,
+    now: Optional[datetime] = None,
+) -> Optional[datetime]:
+    """Resolve cutoff: explicit ``cutoff_date``, else ``now - max_num_day_ago``, else None."""
+    resolved = _coerce_utc_datetime(cutoff_date)
+    if resolved is not None:
+        return resolved
+    if max_num_day_ago is None:
+        return None
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return now - timedelta(days=int(max_num_day_ago))
+
+
+def select_recent_logs_by_session(
+    file_df: pd.DataFrame,
+    most_recent_n_logs: int = 3,
+    cutoff_date: Optional[DateLike] = None,
+) -> pd.DataFrame:
+    """Per-session newest ``.log`` rows (up to ``most_recent_n_logs``) after ``cutoff_date``.
+
+    Returns columns: parent_path, name, last_modified, size, log_path
+    ordered by parent_path then last_modified descending.
+    """
+    empty_cols = ["parent_path", "name", "last_modified", "size", "log_path"]
+    if file_df is None or file_df.empty or most_recent_n_logs <= 0:
+        return pd.DataFrame(columns=empty_cols)
+
+    logs = file_df[file_df["name"].astype(str).str.endswith(".log")].copy()
+    if logs.empty:
+        return pd.DataFrame(columns=empty_cols)
+
+    logs["last_modified"] = pd.to_datetime(logs["last_modified"], utc=True)
+    cutoff = _coerce_utc_datetime(cutoff_date)
+    if cutoff is not None:
+        cutoff_ts = pd.Timestamp(cutoff)
+        if cutoff_ts.tzinfo is None:
+            cutoff_ts = cutoff_ts.tz_localize("UTC")
+        logs = logs[logs["last_modified"] > cutoff_ts]
+
+    if logs.empty:
+        return pd.DataFrame(columns=empty_cols)
+
+    recent = (
+        logs.sort_values("last_modified", ascending=False)
+        .groupby("parent_path", group_keys=False)
+        .head(most_recent_n_logs)
+    )
+    recent = recent.copy()
+    recent["log_path"] = [
+        str(Path(pp) / nm) for pp, nm in zip(recent["parent_path"], recent["name"])
+    ]
+    return recent.sort_values(
+        by=["parent_path", "last_modified"], ascending=[True, False]
+    ).reset_index(drop=True)
 
 
 def read_log_tail(path: PathLike, n_lines: int = 80) -> str:
@@ -199,43 +277,85 @@ def build_session_status_df(
 def show_session_log_browser(
     root: PathLike = r"K:/scratch/gen_scripts",
     n_tail_lines: int = 80,
+    most_recent_n_logs: int = 3,
+    cutoff_date: Optional[DateLike] = None,
+    max_num_day_ago: Optional[int] = 4,
     n_most_recent_files: int = 1,
 ) -> pd.DataFrame:
-    """Display status table + Accordion of latest log tails (one section per session).
+    """Display status table + Accordion of recent log tails (one section per session).
+
+    Each session section shows up to ``most_recent_n_logs`` ``.log`` tails whose
+    ``last_modified`` is newer than ``cutoff_date`` (default: ``max_num_day_ago``
+    days before now). Sessions are ordered by newest log mtime.
 
     Returns the session status DataFrame. Requires ipywidgets in the Jupyter kernel.
     """
     import ipywidgets as widgets
 
     root_path = Path(root)
+    resolved_cutoff = resolve_cutoff_date(
+        cutoff_date=cutoff_date, max_num_day_ago=max_num_day_ago
+    )
     file_df = list_local_gen_scripts_files(root_path)
     status_df = build_session_status_df(file_df, n_most_recent_files=n_most_recent_files)
-    display(status_df)
 
-    # Accordion order matches status_df (newest log_mtime first).
-    with_log = status_df[status_df["log_path"].notna()].copy()
-    with_log = with_log.sort_values(by=["log_mtime"], ascending=False, na_position="last")
+    recent_logs = select_recent_logs_by_session(
+        file_df,
+        most_recent_n_logs=most_recent_n_logs,
+        cutoff_date=resolved_cutoff,
+    )
+    sessions_with_logs = set(recent_logs["parent_path"].unique()) if not recent_logs.empty else set()
+    if sessions_with_logs:
+        display_status = status_df[status_df["parent_path"].isin(sessions_with_logs)].copy()
+    else:
+        display_status = status_df.iloc[0:0].copy()
+    display(display_status)
 
+    # One accordion entry per session; newest session first.
     children = []
     titles = []
-    for row in with_log.itertuples(index=False):
-        tail = read_log_tail(row.log_path, n_lines=n_tail_lines)
-        header = (
-            f"{row.log_name}\n"
-            f"size={row.log_size}  mtime={row.log_mtime}  age_h={row.age_hours!r}\n"
-            f"{row.log_path}\n"
-            f"{'-' * 72}\n"
+    if not recent_logs.empty:
+        session_order = (
+            recent_logs.groupby("parent_path", sort=False)["last_modified"]
+            .max()
+            .sort_values(ascending=False)
         )
-        children.append(
-            widgets.Textarea(
-                value=header + tail,
-                layout=widgets.Layout(width="100%", height="320px"),
-                disabled=True,
+        status_by_parent = (
+            status_df.set_index("parent_path")["status"].to_dict()
+            if not status_df.empty
+            else {}
+        )
+        for parent_path in session_order.index:
+            session_logs = recent_logs[recent_logs["parent_path"] == parent_path]
+            blocks = []
+            for log_row in session_logs.itertuples(index=False):
+                tail = read_log_tail(log_row.log_path, n_lines=n_tail_lines)
+                blocks.append(
+                    f"{log_row.name}\n"
+                    f"size={log_row.size}  mtime={log_row.last_modified}\n"
+                    f"{log_row.log_path}\n"
+                    f"{'-' * 72}\n"
+                    f"{tail}"
+                )
+            ## END for log_row in session_logs.itertuples(index=False)....
+
+            n_shown = len(blocks)
+            height_px = min(720, 280 + max(0, n_shown - 1) * 200)
+            children.append(
+                widgets.Textarea(
+                    value=("\n\n" + ("=" * 72) + "\n\n").join(blocks),
+                    layout=widgets.Layout(width="100%", height=f"{height_px}px"),
+                    disabled=True,
+                )
             )
-        )
-        mtime_str = _format_log_mtime(row.log_mtime)
-        titles.append(f"[{row.status}] {row.session}  ·  {mtime_str}")
-    ## END for row in with_log.itertuples(index=False)....
+            session_name = Path(parent_path).name
+            status = status_by_parent.get(parent_path, "?")
+            newest_mtime = session_order.loc[parent_path]
+            mtime_str = _format_log_mtime(newest_mtime)
+            titles.append(
+                f"[{status}] {session_name}  ·  {mtime_str}  ·  {n_shown} log(s)"
+            )
+        ## END for parent_path in session_order.index....
 
     if children:
         accordion = widgets.Accordion(children=children)
@@ -244,5 +364,10 @@ def show_session_log_browser(
         ## END for i, title in enumerate(titles)....
         display(accordion)
     else:
-        print(f"No latest .log files found under {root_path}")
+        cutoff_msg = (
+            f" newer than {resolved_cutoff.isoformat()}"
+            if resolved_cutoff is not None
+            else ""
+        )
+        print(f"No .log files{cutoff_msg} found under {root_path}")
     return status_df
