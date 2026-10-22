@@ -417,7 +417,7 @@ class GlobusConnector:
         return True
         
 
-    def get_greatlakes_gen_scripts_log_files(self, max_num_day_ago: int = 4, start_date: Optional[DateLike] = None, n_most_recent_files: int = 1, **kwargs):
+    def get_greatlakes_gen_scripts_log_files(self, max_num_day_ago: int = 4, start_date: Optional[DateLike] = None, n_most_recent_files: int = 1, active_remote_gen_scripts_bookmark: Optional[Bookmark]=None, **kwargs):
         """ Gets the log files produced by `gen_scripts` on Greatlakes
         from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
 
@@ -430,15 +430,18 @@ class GlobusConnector:
             print(f'earliest_search_day_date: {DAY_DATE_STR}')
             start_date = DAY_DATE_STR
             
-        lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
-        log_file_list: FileList = self.list_files(endpoint=lab_Greatlakes_gen_scripts.endpoint_id, path=lab_Greatlakes_gen_scripts.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=1, filter="name:~*.log,~*.err,~*.out")
+        if active_remote_gen_scripts_bookmark is None:
+            lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
+            active_remote_gen_scripts_bookmark = lab_Greatlakes_gen_scripts
+
+        log_file_list: FileList = self.list_files(endpoint=active_remote_gen_scripts_bookmark.endpoint_id, path=active_remote_gen_scripts_bookmark.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=1, filter="name:~*.log,~*.err,~*.out")
         all_log_file_df: pd.DataFrame = log_file_list.to_dataframe() #.columns
         
         most_recent_only_log_file_df = get_only_most_recent_log_files(log_file_df=all_log_file_df, n_most_recent_files=n_most_recent_files, **kwargs)
         return all_log_file_df, most_recent_only_log_file_df
     
 
-    def get_greatlakes_collected_outputs_files(self, max_num_day_ago: int = 4, start_date: Optional[DateLike] = None, filter="name:~*.csv,~*.h5"):
+    def get_greatlakes_collected_outputs_files(self, max_num_day_ago: int = 4, start_date: Optional[DateLike] = None, filter="name:~*.csv,~*.h5", active_remote_collected_outputs_bookmark: Optional[Bookmark]=None, **kwargs):
         """ Gets the log files produced by `gen_scripts` on Greatlakes
         from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
 
@@ -451,9 +454,11 @@ class GlobusConnector:
             print(f'earliest_search_day_date: {DAY_DATE_STR}')
             start_date = DAY_DATE_STR
             
-        lab_Turbo_collected_outputs_bookmark = Bookmark(bookmark_id='91181e28-f90d-11ee-9222-472b0fe4395a', name='KDIBA Lab Turbo - collected_outputs', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/')
-        lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
-        file_list: FileList = self.list_files(endpoint=lab_Turbo_collected_outputs_bookmark.endpoint_id, path=lab_Turbo_collected_outputs_bookmark.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=2, filter=filter)
+        if active_remote_collected_outputs_bookmark is None:
+            lab_Turbo_collected_outputs_bookmark = Bookmark(bookmark_id='91181e28-f90d-11ee-9222-472b0fe4395a', name='KDIBA Lab Turbo - collected_outputs', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/')
+            # lab_Greatlakes_gen_scripts = Bookmark(bookmark_id='99efa634-3ead-11ef-888b-2b3122c1d121', name='Greatlakes gen_scripts', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/gen_scripts/')
+            active_remote_collected_outputs_bookmark = lab_Turbo_collected_outputs_bookmark
+        file_list: FileList = self.list_files(endpoint=active_remote_collected_outputs_bookmark.endpoint_id, path=active_remote_collected_outputs_bookmark.path, start_date=start_date, end_date=None, should_list_recursively=True, max_depth=2, filter=filter)
         all_file_df: pd.DataFrame = file_list.to_dataframe() #.columns
         
         # most_recent_only_file_df = get_only_most_recent_log_files(log_file_df=all_file_df)
