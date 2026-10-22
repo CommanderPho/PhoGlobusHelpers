@@ -2,7 +2,7 @@ from pathlib import Path
 import time
 from copy import deepcopy
 from collections import deque
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Any, List, NoReturn, Optional, Dict, Union
 from globus_sdk.response import GlobusHTTPResponse
 import pandas as pd
@@ -23,6 +23,34 @@ from phoglobushelpers.path_helpers import (
 
 
 TransferFilterDict = Dict[str, Union[str, List[str]]]
+DateLike = Union[str, datetime, date]
+
+
+def _coerce_utc_datetime(value: Optional[DateLike]) -> Optional[datetime]:
+    """Normalize date/datetime/ISO string to a timezone-aware UTC datetime.
+
+    Naive datetimes and date-only values are treated as UTC midnight / UTC.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, date):
+        parsed = datetime(value.year, value.month, value.day)
+    elif isinstance(value, str):
+        text = value.strip().replace('Z', '+00:00')
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            parsed = datetime.combine(date.fromisoformat(text), datetime.min.time())
+    else:
+        ts = pd.to_datetime(value, utc=True)
+        if pd.isna(ts):
+            return None
+        parsed = ts.to_pydatetime()
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _reraise_transfer_api_error(err: TransferAPIError) -> NoReturn:
@@ -170,8 +198,13 @@ class GlobusConnector:
         return tasks_list
 
 
-    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List[str], filelist_dest:List[str], label: str = "Batch Transfer", batch_size: int = 1000, synchronous_wait:bool=False, max_single_file_wait_time_seconds=60, preserve_timestamp: bool = True):
+    def batch_transfer_files(self, source_endpoint:str, destination_endpoint:str, filelist_source:List[str], filelist_dest:List[str], label: str = "Batch Transfer", batch_size: int = 1000, synchronous_wait:bool=False, max_single_file_wait_time_seconds=60, preserve_timestamp: bool = False):
         """ performs a batch transfer for the files specified in the filelists from source to endpoint.
+
+        `preserve_timestamp` defaults False: many servers reject Globus timestamp
+        preservation and fail the whole transfer. Prefer post-hoc
+        `apply_local_file_timestamps` when the dest is local. Pass True only when
+        both endpoints support the feature.
         # Set your source and destination endpoint IDs
         # source_endpoint = "SOURCE_ENDPOINT_ID"
         # destination_endpoint = "DESTINATION_ENDPOINT_ID"
@@ -207,7 +240,7 @@ class GlobusConnector:
         pending_tasks = {}
         transfer_client: TransferClient = self.transfer_client
 
-        # Set your transfer options (preserve_timestamp sets dest mtime to match source; works Unix→Windows)
+        # Opt-in only: unsupported servers fail the entire transfer if True
         transfer_options = {
             "preserve_timestamp": preserve_timestamp,
         }
@@ -272,7 +305,7 @@ class GlobusConnector:
         
 
 
-    def list_files(self, endpoint: str, path: str, start_date: Optional[str] = None, end_date: Optional[str] = None, should_list_recursively: bool = False, max_depth: int = 1, _current_depth: int = 0, filter:Optional[Any]=None) -> FileList:
+    def list_files(self, endpoint: str, path: str, start_date: Optional[DateLike] = None, end_date: Optional[DateLike] = None, should_list_recursively: bool = False, max_depth: int = 1, _current_depth: int = 0, filter:Optional[Any]=None) -> FileList:
         """ NOTE: only returns FILES, not FOLDERS/DIRECTORIES
         
         For filter format, see: https://docs.globus.org/api/transfer/file_operations/#dir_listing_filtering
@@ -359,23 +392,32 @@ class GlobusConnector:
 
     
 
-    def is_file_within_date_range(self, file_item: File, start_date: Optional[str], end_date: Optional[str]) -> bool:
+    def is_file_within_date_range(self, file_item: File, start_date: Optional[DateLike], end_date: Optional[DateLike]) -> bool:
         """
         Check if the file's last modification date falls within the specified start and end dates.
 
+        Globus listings keep ``last_modified`` as an ISO string (e.g.
+        ``"2023-04-17 23:40:01+00:00"``). Callers may pass a matching string,
+        a ``date``, or a ``datetime`` (naive values are treated as UTC).
+
         :param file_item: The file item to check.
-        :param start_date: The start date for the search.
-        :param end_date: The end date for the search.
+        :param start_date: Inclusive start of the search window.
+        :param end_date: Inclusive end of the search window.
         :return: True if the file's last modification date falls within the date range, False otherwise.
         """
-        if start_date and file_item.last_modified < start_date:
+        file_mtime = _coerce_utc_datetime(file_item.last_modified)
+        if file_mtime is None:
             return False
-        if end_date and file_item.last_modified > end_date:
+        start_dt = _coerce_utc_datetime(start_date)
+        end_dt = _coerce_utc_datetime(end_date)
+        if start_dt is not None and file_mtime < start_dt:
+            return False
+        if end_dt is not None and file_mtime > end_dt:
             return False
         return True
         
 
-    def get_greatlakes_gen_scripts_log_files(self, max_num_day_ago: int = 4, start_date=None, n_most_recent_files: int = 1, **kwargs):
+    def get_greatlakes_gen_scripts_log_files(self, max_num_day_ago: int = 4, start_date: Optional[DateLike] = None, n_most_recent_files: int = 1, **kwargs):
         """ Gets the log files produced by `gen_scripts` on Greatlakes
         from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
 
@@ -396,7 +438,7 @@ class GlobusConnector:
         return all_log_file_df, most_recent_only_log_file_df
     
 
-    def get_greatlakes_collected_outputs_files(self, max_num_day_ago: int = 4, start_date=None, filter="name:~*.csv,~*.h5"):
+    def get_greatlakes_collected_outputs_files(self, max_num_day_ago: int = 4, start_date: Optional[DateLike] = None, filter="name:~*.csv,~*.h5"):
         """ Gets the log files produced by `gen_scripts` on Greatlakes
         from phoglobushelpers.PhoGlobusHelper import get_greatlakes_gen_scripts_log_files
 
@@ -418,7 +460,7 @@ class GlobusConnector:
         return all_file_df
 
 
-    def get_greatlakes_temp_individual_posteriors_files(self, max_num_day_ago: int = 4, start_date=None, filter="name:~*.png", lab_Turbo_temp_individual_posteriors_bookmark: Optional[Bookmark]=None, max_depth: int=2,
+    def get_greatlakes_temp_individual_posteriors_files(self, max_num_day_ago: int = 4, start_date: Optional[DateLike] = None, filter="name:~*.png", lab_Turbo_temp_individual_posteriors_bookmark: Optional[Bookmark]=None, max_depth: int=2,
             relative_path: Optional[str] = None,  # e.g. "2026-09-16" or "2026-09-16/*/..." no — just a path segment
         ):
         """ Gets the log files produced by `gen_scripts` on Greatlakes
@@ -455,7 +497,7 @@ class GlobusConnector:
 
 
     # @function_attributes(short_name=None, tags=['_temp_individual_posterior'], input_requires=[], output_provides=[], uses=['.get_greatlakes_temp_individual_posteriors_files'], used_by=[], creation_date='2026-09-16 09:05', related_items=[])
-    def build_all_sessions_temp_individual_posterior_files_dir(self, max_num_day_ago: int = 1, start_date=None, filter="name:~*.png", relative_path: str = "2026-09-16",
+    def build_all_sessions_temp_individual_posterior_files_dir(self, max_num_day_ago: int = 1, start_date: Optional[DateLike] = None, filter="name:~*.png", relative_path: str = "2026-09-16",
         session_relative_desired_path: str = 'ripple/combined/multi',
         lab_Turbo_temp_individual_posteriors_bookmark: Optional[Bookmark] = None,
     ):
@@ -544,22 +586,26 @@ class GlobusConnector:
         active_file_df: pd.DataFrame,
         transfer: TransferRequest,
         synchronous_wait: bool = True,
-        preserve_timestamp: bool = True,
+        preserve_timestamp: bool = False,
         dry_run: bool = False,
     ) -> pd.DataFrame:
         """Copy files between endpoints; return source/dest path DataFrame.
 
-        `preserve_timestamp=True` asks Globus to set dest mtime to match source
-        (works Unix→Windows). For Windows creation (birth) time after files land
-        locally, call `apply_local_file_timestamps(transfer_path_df)`.
+        `preserve_timestamp` defaults False (unsupported servers fail the whole
+        transfer). Preferred for Apogee: leave False, then call
+        `apply_local_file_timestamps(transfer_path_df)` after files land locally
+        (sets mtime + Windows birth time from listing `last_modified`). When
+        `synchronous_wait=True`, that post-hoc apply runs automatically.
 
         Usage:
             transfer_path_df = connect_man.perform_copy_files(
                 active_file_df=active_file_df,
                 transfer=gen_scripts_GL_to_Apogee,
                 synchronous_wait=False,
-                preserve_timestamp=True,
+                preserve_timestamp=False,
             )
+            # after async transfer completes:
+            connect_man.apply_local_file_timestamps(transfer_path_df)
             # Preview only:
             transfer_path_df = connect_man.perform_copy_files(..., dry_run=True)
         """
@@ -576,6 +622,8 @@ class GlobusConnector:
             label=transfer.transfer_label,
             preserve_timestamp=preserve_timestamp,
         )
+        if synchronous_wait:
+            self.apply_local_file_timestamps(path_df)
         return path_df
 
 

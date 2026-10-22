@@ -1,7 +1,7 @@
 """Local gen_scripts run-log status helpers for K:/scratch/gen_scripts (and similar).
 
 Lists newest .log/.err/.out per session folder, classifies Running/Finished/etc.,
-and optionally shows an inline Jupyter Accordion with recent log tails per session.
+and optionally shows an inline Jupyter Accordion with recent full logs per session.
 """
 from __future__ import annotations
 
@@ -253,8 +253,11 @@ def select_recent_logs_by_session(
     ).reset_index(drop=True)
 
 
-def read_log_tail(path: PathLike, n_lines: int = 80) -> str:
-    """Return the last ``n_lines`` of a text file (UTF-8, replace errors)."""
+def read_log_tail(path: PathLike, n_lines: int = 0) -> str:
+    """Return log text (UTF-8, replace errors).
+
+    ``n_lines <= 0`` returns the entire file; a positive value returns the last N lines.
+    """
     p = Path(path)
     if not p.is_file():
         return f"(missing: {p})"
@@ -353,20 +356,15 @@ def build_session_status_df(
     return status_df.sort_values(by=["log_mtime"], ascending=False, na_position="last").reset_index(drop=True)
 
 
-def show_session_log_browser(
-    root: PathLike = r"K:/scratch/gen_scripts",
-    n_tail_lines: int = 80,
-    most_recent_n_logs: int = 3,
-    cutoff_date: Optional[DateLike] = None,
-    max_num_day_ago: Optional[int] = 4,
-    n_most_recent_files: int = 1,
-    most_recent_only_log_file_df: Optional[pd.DataFrame] = None,
-) -> pd.DataFrame:
-    """Display status table + Accordion of recent log tails (one section per session).
+def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_lines: int = 0, most_recent_n_logs: int = 3, cutoff_date: Optional[DateLike] = None, max_num_day_ago: Optional[int] = 4, n_most_recent_files: int = 1, most_recent_only_log_file_df: Optional[pd.DataFrame] = None, **kwargs) -> pd.DataFrame:
+    """Display status table + Accordion of recent logs (one section per session).
 
-    Each session section shows up to ``most_recent_n_logs`` ``.log`` tails whose
+    Each session section shows up to ``most_recent_n_logs`` ``.log`` files whose
     ``last_modified`` is newer than ``cutoff_date`` (default: ``max_num_day_ago``
     days before now). Sessions are ordered by newest log mtime.
+
+    By default ``n_tail_lines=0`` shows each log in full; set a positive value to
+    show only the last N lines.
 
     When ``most_recent_only_log_file_df`` is provided (e.g. Globus listing), its
     ``last_modified`` values overlay local filesystem mtimes matched by session
@@ -438,7 +436,7 @@ def show_session_log_browser(
                 )
                 textarea = widgets.Textarea(
                     value=tail,
-                    layout=widgets.Layout(width="100%", height="280px"),
+                    layout=widgets.Layout(width="100%", height="480px"),
                     disabled=True,
                 )
                 textarea.add_class("gen-scripts-log-textarea")
