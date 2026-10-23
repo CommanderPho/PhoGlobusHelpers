@@ -24,6 +24,7 @@ dependencies = [
     "pyside6>=6.10.3",
     "fusepy>=3.0.1",
     "ipywidgets>=8.1.9",
+    "win32-setctime>=1.2.0",
 ]
 
 [dependency-groups]
