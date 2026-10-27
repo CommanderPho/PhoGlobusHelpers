@@ -504,7 +504,7 @@ class GlobusConnector:
     # @function_attributes(short_name=None, tags=['_temp_individual_posterior'], input_requires=[], output_provides=[], uses=['.get_greatlakes_temp_individual_posteriors_files'], used_by=[], creation_date='2026-09-16 09:05', related_items=[])
     def build_all_sessions_temp_individual_posterior_files_dir(self, max_num_day_ago: int = 1, start_date: Optional[DateLike] = None, filter="name:~*.png", relative_path: str = "2026-09-16",
         session_relative_desired_path: str = 'ripple/combined/multi',
-        lab_Turbo_temp_individual_posteriors_bookmark: Optional[Bookmark] = None,
+        active_remote_temp_individual_posteriors_bookmark: Optional[Bookmark] = None,
     ):
         """
             ## `session_relative_desired_path`: folder path to find files in and copy from relative to each session
@@ -525,13 +525,13 @@ class GlobusConnector:
 
         """
         ## Find the session folders (only top level, non-recurrsive) for today's export date on GL:
-        if lab_Turbo_temp_individual_posteriors_bookmark is None:
-            lab_Turbo_temp_individual_posteriors_bookmark = lab_Turbo_temp_individual_posteriors_bookmark = Bookmark(bookmark_id='b88204e2-b125-11f1-830f-0afff7074b21', name='Turbo _temp_individual_posteriors', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/figures/_temp_individual_posteriors/')
+        if active_remote_temp_individual_posteriors_bookmark is None:
+            active_remote_temp_individual_posteriors_bookmark = Bookmark(bookmark_id='b88204e2-b125-11f1-830f-0afff7074b21', name='Turbo _temp_individual_posteriors', endpoint_id='8c185a84-5c61-4bbc-b12b-11430e20010f', path='/umms-kdiba/Data/Output/collected_outputs/figures/_temp_individual_posteriors/')
 
-        path = f"{lab_Turbo_temp_individual_posteriors_bookmark.path.rstrip('/')}/{relative_path.strip('/')}"
+        path = f"{active_remote_temp_individual_posteriors_bookmark.path.rstrip('/')}/{relative_path.strip('/')}"
 
         try:
-            response = self.transfer_client.operation_ls(endpoint_id=lab_Turbo_temp_individual_posteriors_bookmark.endpoint_id, path=path, filter="type:dir")
+            response = self.transfer_client.operation_ls(endpoint_id=active_remote_temp_individual_posteriors_bookmark.endpoint_id, path=path, filter="type:dir")
         except TransferAPIError as err:
             if err.info.consent_required:
                 raise
@@ -552,7 +552,7 @@ class GlobusConnector:
             try:
                 an_all_file_df: pd.DataFrame = self.get_greatlakes_temp_individual_posteriors_files(max_num_day_ago=max_num_day_ago, start_date=start_date, filter=filter, max_depth=0,
                         relative_path=a_session_rel_path, # like '2026-09-16/gor01_one_2006-6-12_15-55-31/ripple/combined/multi'
-                        lab_Turbo_temp_individual_posteriors_bookmark=lab_Turbo_temp_individual_posteriors_bookmark,
+                        lab_Turbo_temp_individual_posteriors_bookmark=active_remote_temp_individual_posteriors_bookmark,
                     )
             except FileNotFoundError as err:
                 print(f"WARNING: skipping session '{a_sess_name}': {err}")
