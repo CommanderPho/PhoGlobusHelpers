@@ -463,19 +463,20 @@ sdist = { url = "https://files.pythonhosted.org/packages/04/0b/4506cb2e831cea4b0
 
 [[package]]
 name = "globus-cli"
-version = "3.31.0"
+version = "3.39.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "globus-sdk" },
     { name = "jmespath" },
     { name = "packaging" },
-    { name = "requests" },
+    { name = "requests", version = "2.32.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "requests", version = "2.34.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cc/00/72c5b8c93983c3b61e466912b609ff7a49a7003c1f3b2940fe862a00f57b/globus_cli-3.31.0.tar.gz", hash = "sha256:7db86518811ab07b34f9f1279edd0b7db3cb63f00e22e80d41d167a8c1bf632f", size = 184155, upload-time = "2024-10-15T20:47:54.169Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/06/b88bcf6882440cbe94857c7e2831d400d0bfaa77dce0444b17f5784e55a9/globus_cli-3.39.0.tar.gz", hash = "sha256:d5b37cd70e93c7586d2dd92efa97fea4fc9731afd5d9f2a28dca208c4b319c82", size = 194268, upload-time = "2025-10-15T19:11:43.757Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/be/6493dc0bb352dc473349e8f7f0f289130168d34fb7b69b6d3d1619ff6a5a/globus_cli-3.31.0-py3-none-any.whl", hash = "sha256:c331418f4486573fa5bcbf380cd0daf154f8c85c1baa5eb90d262e3a6888a0ce", size = 296331, upload-time = "2024-10-15T20:47:52.536Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/79/918e0df440d5018743ff215630f513f40014b6f8bfcabd52b5c7176f8912/globus_cli-3.39.0-py3-none-any.whl", hash = "sha256:038bdda0c7804f0ad9fed012fdb92e9eed8891ccd6472348afbaede54ebe3abe", size = 312575, upload-time = "2025-10-15T19:11:41.96Z" },
 ]
 
 [[package]]
@@ -503,7 +504,8 @@ dependencies = [
     { name = "packaging" },
     { name = "pika" },
     { name = "psutil" },
-    { name = "requests" },
+    { name = "requests", version = "2.32.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "requests", version = "2.34.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "rich" },
     { name = "tblib" },
     { name = "texttable" },
@@ -530,17 +532,18 @@ wheels = [
 
 [[package]]
 name = "globus-sdk"
-version = "3.45.0"
+version = "3.65.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "pyjwt", extra = ["crypto"] },
-    { name = "requests" },
-    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
+    { name = "requests", version = "2.32.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "requests", version = "2.34.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/81/1f00b06ad8b50140d3ea1a2421e4732218fbe766eeb7b518a59af0ebd70d/globus_sdk-3.45.0.tar.gz", hash = "sha256:80da09d3ca254a63e1aa6d2f7cf86bc3252cf62f4321378a09199283b9df87fb", size = 243180, upload-time = "2024-09-06T17:38:35.123Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/93/a6f6686bb2beb038047abe203b48c7f995f6a96884679eedf7e9aa34300b/globus_sdk-3.65.0.tar.gz", hash = "sha256:a4b350b980809e86d768c8e327de9ddee4405b60cfb83429cdf831ac0c63d763", size = 275365, upload-time = "2025-10-03T01:56:45.402Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b0/74/4c5c27708f03d616cf113e8db1f809201109380581d2513390a6abfa9d0c/globus_sdk-3.45.0-py3-none-any.whl", hash = "sha256:bf3d523f5ac690539ab97e45195f44689f2df537ec5af73e77e2eaba4c1721e3", size = 363562, upload-time = "2024-09-06T17:38:33.145Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/cd/f89c1d66a678d456887d305669ad929cb3ea742be1f563899a9949bcb41f/globus_sdk-3.65.0-py3-none-any.whl", hash = "sha256:d14154c3a40bb6c4d6a77e7200234d43358bd1daca9224841d4297f0edea80e6", size = 418025, upload-time = "2025-10-03T01:56:43.495Z" },
 ]
 
 [[package]]
@@ -551,7 +554,8 @@ dependencies = [
     { name = "google-auth" },
     { name = "googleapis-common-protos" },
     { name = "protobuf" },
-    { name = "requests" },
+    { name = "requests", version = "2.32.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "requests", version = "2.34.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/b8/f727ada5b63aba53848e3791dd57be7481d5c9bf86978600ca9cca4ab03e/google-api-core-2.11.1.tar.gz", hash = "sha256:25d29e05a0058ed5f19c61c0a78b1b53adea4d9364b464d014fbda941f6d1c9a", size = 129114, upload-time = "2023-06-14T18:47:12.762Z" }
 wheels = [
@@ -996,7 +1000,8 @@ dependencies = [
     { name = "jsonschema" },
     { name = "jupyter-server" },
     { name = "packaging" },
-    { name = "requests" },
+    { name = "requests", version = "2.32.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "requests", version = "2.34.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1e/29/d867a88db915b54ff1025a9c0576b051687ac5baa5f7cd723e22069606de/jupyterlab_server-2.24.0.tar.gz", hash = "sha256:4e6f99e0a5579bbbc32e449c4dbb039561d4f1a7827d5733273ed56738f21f07", size = 72145, upload-time = "2023-07-24T08:07:24.605Z" }
 wheels = [
@@ -1406,7 +1411,7 @@ requires-dist = [
     { name = "globus-cli", specifier = ">=3.13.0,<4" },
     { name = "globus-compute-sdk", specifier = ">=2.29.0" },
     { name = "globus-jupyterlab", specifier = ">=1.0.0b10,<2" },
-    { name = "globus-sdk", specifier = ">=3.16.0,<4" },
+    { name = "globus-sdk", specifier = ">=3.46.0,<4" },
     { name = "google-api-python-client", specifier = ">=2.98.0,<3" },
     { name = "google-auth-httplib2", specifier = ">=0.1.0,<0.2" },
     { name = "google-auth-oauthlib", specifier = ">=1.0.0,<2" },
@@ -1937,17 +1942,39 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.31.0"
+version = "2.32.5"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "certifi" },
-    { name = "charset-normalizer" },
-    { name = "idna" },
-    { name = "urllib3" },
+resolution-markers = [
+    "python_full_version < '3.10'",
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1", size = 110794, upload-time = "2023-05-22T15:12:44.175Z" }
+dependencies = [
+    { name = "certifi", marker = "python_full_version < '3.10'" },
+    { name = "charset-normalizer", marker = "python_full_version < '3.10'" },
+    { name = "idna", marker = "python_full_version < '3.10'" },
+    { name = "urllib3", marker = "python_full_version < '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", hash = "sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f", size = 62574, upload-time = "2023-05-22T15:12:42.313Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
+]
+
+[[package]]
+name = "requests"
+version = "2.34.2"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.11'",
+    "python_full_version == '3.10.*'",
+]
+dependencies = [
+    { name = "certifi", marker = "python_full_version >= '3.10'" },
+    { name = "charset-normalizer", marker = "python_full_version >= '3.10'" },
+    { name = "idna", marker = "python_full_version >= '3.10'" },
+    { name = "urllib3", marker = "python_full_version >= '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
 ]
 
 [[package]]
@@ -1956,7 +1983,8 @@ version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "oauthlib" },
-    { name = "requests" },
+    { name = "requests", version = "2.32.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "requests", version = "2.34.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/95/52/531ef197b426646f26b53815a7d2a67cb7a331ef098bb276db26a68ac49f/requests-oauthlib-1.3.1.tar.gz", hash = "sha256:75beac4a47881eeb94d5ea5d6ad31ef88856affe2332b9aafb52c6452ccf0d7a", size = 52027, upload-time = "2022-01-29T18:52:24.037Z" }
 wheels = [

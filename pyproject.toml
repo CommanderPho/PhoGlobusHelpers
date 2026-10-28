@@ -6,7 +6,7 @@ authors = [{ name = "Pho Hale", email = "PhoHale@gmail.com" }]
 requires-python = ">=3.9,<3.12"
 readme = "README.md"
 dependencies = [
-    "globus-sdk>=3.16.0,<4",
+    "globus-sdk>=3.46.0,<4",
     "globus-cli>=3.13.0,<4",
     "pathlib>=1.0.1,<2",
     "wheel>=0.38.4,<0.39",

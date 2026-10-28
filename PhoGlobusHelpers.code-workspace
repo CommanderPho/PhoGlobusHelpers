@@ -2,12 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"path": "../PhoLinuxHelpers"
-		},
-		{
-			"path": "../PhoWindowsHelpers"
 		}
 	],
 	"settings": {

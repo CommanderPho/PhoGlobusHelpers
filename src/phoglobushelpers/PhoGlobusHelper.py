@@ -3,12 +3,12 @@ import time
 from copy import deepcopy
 from collections import deque
 from datetime import datetime, date, timedelta, timezone
-from typing import Any, List, NoReturn, Optional, Dict, Union
+from typing import Any, List, NoReturn, Optional, Dict, Union, Tuple
 from globus_sdk.response import GlobusHTTPResponse
 import pandas as pd
 import globus_sdk
-from globus_sdk import AccessTokenAuthorizer, TransferClient, TransferData, TransferAPIError
-from globus_sdk.scopes import TransferScopes
+from globus_sdk import AccessTokenAuthorizer, TransferClient, TransferData, TransferAPIError, UserApp, GlobusAppConfig
+from globus_sdk.scopes import TransferScopes, AuthScopes, Scope
 from attrs import define, field, Factory
 
 from phoglobushelpers.compatibility_objects.Bookmarks import Bookmark, BookmarkList
@@ -61,6 +61,43 @@ def _reraise_transfer_api_error(err: TransferAPIError) -> NoReturn:
     raise RuntimeError(msg) from None
 
 
+def _parse_scope_objects(scopes: Optional[Union[str, List[str]]]) -> List[Scope]:
+    """Parse a space-separated scope string or list of scope strings into Scope objects."""
+    if not scopes:
+        return []
+    if isinstance(scopes, str):
+        return Scope.parse(scopes)
+    parsed: List[Scope] = []
+    for item in scopes:
+        parsed.extend(Scope.parse(str(item)))
+    ## END for item in scopes....
+
+    return parsed
+
+
+def _resource_server_for_scope(scope: Scope) -> str:
+    """Map a parsed Scope to its Globus resource server."""
+    top = scope.scope_string
+    if top in (AuthScopes.openid, AuthScopes.profile, AuthScopes.email):
+        return AuthScopes.resource_server
+    prefix = 'urn:globus:auth:scope:'
+    if top.startswith(prefix):
+        resource_server, _sep, _name = top[len(prefix):].rpartition(':')
+        if resource_server:
+            return resource_server
+    return TransferScopes.resource_server
+
+
+def _scope_requirements_from_scopes(scopes: Optional[Union[str, List[str]]]) -> Dict[str, List[Scope]]:
+    """Group parsed scopes by resource server for UserApp.add_scope_requirements."""
+    requirements: Dict[str, List[Scope]] = {}
+    for scope in _parse_scope_objects(scopes):
+        requirements.setdefault(_resource_server_for_scope(scope), []).append(scope)
+    ## END for scope in _parse_scope_objects(scopes)....
+
+    return requirements
+
+
 class KnownEndpoints:
     globus_endpoint_gl_homedir:str='e0370902-9f48-11e9-821b-02b7a92d8e58'
     globus_endpoint_kdiba_lab_turbo:str='8c185a84-5c61-4bbc-b12b-11430e20010f'
@@ -110,21 +147,69 @@ class GlobusConnector:
 
     """
 
-    # Define the Globus transfer client and authenticate with a user's tokens
-    auth_client = globus_sdk.NativeAppAuthClient('769d24e1-d1cc-4198-9ff7-2626485da449')
+    CLIENT_ID = '769d24e1-d1cc-4198-9ff7-2626485da449'
+    APP_NAME = 'PhoGlobusHelpers'
+    DEFAULT_SCOPES = 'openid profile email urn:globus:auth:scope:transfer.api.globus.org:all'
 
     # authorizer = field(init=False, default=None)
     transfer_client: TransferClient = field() #, default=None) # TransferClient
+    app: Optional[UserApp] = field(default=None)
 
 
     @classmethod
-    def login_and_get_transfer_client(cls, *, scopes='openid profile email urn:globus:auth:scope:transfer.api.globus.org:all', copy_to_clipboard=True):
-        """ 
+    def login_and_get_transfer_client(cls, *, scopes: Optional[Union[str, List[str]]] = None, copy_to_clipboard=True):
+        """Login and return a GlobusConnector.
+
+        Tries UserApp local-server login (browser + cached refresh tokens) first.
+        Falls back to the Native App auth-code copy/paste flow if that fails.
+
+        Default scopes:
             'openid profile email urn:globus:auth:scope:transfer.api.globus.org:all'
         """
-        cls.auth_client.oauth2_start_flow(refresh_tokens=True, requested_scopes=scopes)
+        if scopes is None:
+            scopes = cls.DEFAULT_SCOPES
+        try:
+            transfer_client, app = cls._login_via_user_app(scopes=scopes)
+            return cls(transfer_client=transfer_client, app=app)
+        except Exception as err:
+            print(f"Browser/local-server login failed ({err}). Falling back to copy/paste auth code.")
+            transfer_client = cls._login_via_auth_code(scopes=scopes, copy_to_clipboard=copy_to_clipboard)
+            return cls(transfer_client=transfer_client, app=None)
 
-        authorize_url = cls.auth_client.oauth2_get_authorize_url()
+
+    @classmethod
+    def _login_via_user_app(cls, *, scopes: Union[str, List[str]]) -> Tuple[TransferClient, UserApp]:
+        """Browser local-server login with JSON-cached refresh tokens."""
+        config = GlobusAppConfig(
+            login_flow_manager="local-server",
+            token_storage="json",
+            request_refresh_tokens=True,
+        )
+        app = UserApp(
+            cls.APP_NAME,
+            client_id=cls.CLIENT_ID,
+            config=config,
+            scope_requirements=_scope_requirements_from_scopes(scopes),
+        )
+        transfer_client = TransferClient(app=app)
+        app.login()
+        return transfer_client, app
+
+
+    @classmethod
+    def _new_auth_client(cls) -> globus_sdk.NativeAppAuthClient:
+        """Create a fresh Native App client (do not reuse across logins or SDK upgrades)."""
+        return globus_sdk.NativeAppAuthClient(cls.CLIENT_ID)
+
+
+    @classmethod
+    def _login_via_auth_code(cls, *, scopes: Union[str, List[str]], copy_to_clipboard=True) -> TransferClient:
+        """Native App auth-code grant: print/copy URL, then prompt for the code."""
+        requested_scopes = scopes if isinstance(scopes, str) else ' '.join(str(s) for s in scopes)
+        auth_client = cls._new_auth_client()
+        auth_client.oauth2_start_flow(refresh_tokens=True, requested_scopes=requested_scopes)
+
+        authorize_url = auth_client.oauth2_get_authorize_url()
         print(f'Please go to this URL and login: {authorize_url}')
         if copy_to_clipboard:
             df = pd.DataFrame([authorize_url])
@@ -132,9 +217,8 @@ class GlobusConnector:
             print(f'\t Copied url to clipboard!')
 
         auth_code = input('Please enter the code you get after login here: ').strip()
-        token_response = cls.auth_client.oauth2_exchange_code_for_tokens(auth_code)
+        token_response = auth_client.oauth2_exchange_code_for_tokens(auth_code)
 
-        # globus_auth_data = token_response.by_resource_server["auth.globus.org"]
         # get credentials for the Globus Transfer service
         globus_transfer_data = token_response.by_resource_server["transfer.api.globus.org"]
         # the refresh token and access token are often abbreviated as RT and AT
@@ -144,14 +228,29 @@ class GlobusConnector:
 
         # construct a RefreshTokenAuthorizer
         # note that `client` is passed to it, to allow it to do the refreshes
-        authorizer = globus_sdk.RefreshTokenAuthorizer(transfer_rt, cls.auth_client, access_token=transfer_at, expires_at=expires_at_s)
+        authorizer = globus_sdk.RefreshTokenAuthorizer(transfer_rt, auth_client, access_token=transfer_at, expires_at=expires_at_s)
 
         # and try using `tc` to make TransferClient calls. Everything should just
         # work -- for days and days, months and months, even years
-        transfer_client = globus_sdk.TransferClient(authorizer=authorizer)
-        
-        return cls(transfer_client=transfer_client)
-        
+        return globus_sdk.TransferClient(authorizer=authorizer)
+
+
+    def _relogin_for_consent(self, required_scopes: Union[str, List[str]], *, copy_to_clipboard=True) -> None:
+        """Acquire additional ConsentRequired scopes and update this connector in place."""
+        if self.app is not None:
+            self.app.add_scope_requirements(_scope_requirements_from_scopes(required_scopes))
+            try:
+                self.app.login()
+                return
+            except Exception as err:
+                print(f"Browser/local-server login failed ({err}). Falling back to copy/paste auth code.")
+                self.transfer_client = type(self)._login_via_auth_code(scopes=required_scopes, copy_to_clipboard=copy_to_clipboard)
+                self.app = None
+                return
+        extra = type(self).login_and_get_transfer_client(scopes=required_scopes, copy_to_clipboard=copy_to_clipboard)
+        self.transfer_client = extra.transfer_client
+        self.app = extra.app
+
 
     def list_endpoints(self):
         # high level interface; provides iterators for list responses
@@ -330,26 +429,28 @@ class GlobusConnector:
                 print(f'WARNING: filter was modified to include "type:dir" because `should_list_recursively=True`. Otherwise no subdirectories would be returned.')
 
         transfer_client: TransferClient = self.transfer_client
+        ls_kwargs = dict(
+            endpoint_id=endpoint,
+            path=path,
+            orderby=["last_modified DESC", "name"],
+            # orderby=["last_modified", "name"],
+            # orderby=["type", "name"],
+            filter=filter,
+        )
 
         try:
-            response_dict = transfer_client.operation_ls(
-                endpoint_id=endpoint,
-                path=path,
-                orderby=["last_modified DESC", "name"],
-                # orderby=["last_modified", "name"],
-                # orderby=["type", "name"],
-                filter=filter
-            )
+            response_dict = transfer_client.operation_ls(**ls_kwargs)
         except globus_sdk.TransferAPIError as err:
             if not err.info.consent_required:
                 _reraise_transfer_api_error(err)
 
             print("Encountered a ConsentRequired error.\nYou must login a second time to grant consents.\n\n")
             print(f'required scopes:\n{err.info.consent_required.required_scopes}\n')
-            transfer_client = self.login_and_get_transfer_client(scopes=err.info.consent_required.required_scopes)
-
-        except Exception as e:
-            raise e
+            self._relogin_for_consent(err.info.consent_required.required_scopes)
+            try:
+                response_dict = self.transfer_client.operation_ls(**ls_kwargs)
+            except globus_sdk.TransferAPIError as retry_err:
+                _reraise_transfer_api_error(retry_err)
 
         data_files = []
         for item in response_dict['DATA']:
