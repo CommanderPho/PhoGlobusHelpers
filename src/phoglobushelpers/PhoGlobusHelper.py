@@ -61,39 +61,37 @@ def _reraise_transfer_api_error(err: TransferAPIError) -> NoReturn:
     raise RuntimeError(msg) from None
 
 
-def _parse_scope_objects(scopes: Optional[Union[str, List[str]]]) -> List[Scope]:
-    """Parse a space-separated scope string or list of scope strings into Scope objects."""
-    if not scopes:
-        return []
-    if isinstance(scopes, str):
-        return Scope.parse(scopes)
-    parsed: List[Scope] = []
-    for item in scopes:
-        parsed.extend(Scope.parse(str(item)))
-    ## END for item in scopes....
-
-    return parsed
-
-
-def _resource_server_for_scope(scope: Scope) -> str:
-    """Map a parsed Scope to its Globus resource server."""
-    top = scope.scope_string
-    if top in (AuthScopes.openid, AuthScopes.profile, AuthScopes.email):
-        return AuthScopes.resource_server
-    prefix = 'urn:globus:auth:scope:'
-    if top.startswith(prefix):
-        resource_server, _sep, _name = top[len(prefix):].rpartition(':')
-        if resource_server:
-            return resource_server
-    return TransferScopes.resource_server
-
-
 def _scope_requirements_from_scopes(scopes: Optional[Union[str, List[str]]]) -> Dict[str, List[Scope]]:
     """Group parsed scopes by resource server for UserApp.add_scope_requirements."""
+    def _subfn_parse_scope_objects(scopes: Optional[Union[str, List[str]]]) -> List[Scope]:
+        """Parse a space-separated scope string or list of scope strings into Scope objects."""
+        if not scopes:
+            return []
+        if isinstance(scopes, str):
+            return Scope.parse(scopes)
+        parsed: List[Scope] = []
+        for item in scopes:
+            parsed.extend(Scope.parse(str(item)))
+        ## END for item in scopes....
+
+        return parsed
+
+    def _subfn_resource_server_for_scope(scope: Scope) -> str:
+        """Map a parsed Scope to its Globus resource server."""
+        top = scope.scope_string
+        if top in (AuthScopes.openid, AuthScopes.profile, AuthScopes.email):
+            return AuthScopes.resource_server
+        prefix = 'urn:globus:auth:scope:'
+        if top.startswith(prefix):
+            resource_server, _sep, _name = top[len(prefix):].rpartition(':')
+            if resource_server:
+                return resource_server
+        return TransferScopes.resource_server
+
     requirements: Dict[str, List[Scope]] = {}
-    for scope in _parse_scope_objects(scopes):
-        requirements.setdefault(_resource_server_for_scope(scope), []).append(scope)
-    ## END for scope in _parse_scope_objects(scopes)....
+    for scope in _subfn_parse_scope_objects(scopes):
+        requirements.setdefault(_subfn_resource_server_for_scope(scope), []).append(scope)
+    ## END for scope in _subfn_parse_scope_objects(scopes)....
 
     return requirements
 
