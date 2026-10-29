@@ -1,7 +1,9 @@
 from copy import deepcopy
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 from attrs import define, field, Factory
 from enum import Enum
+import fnmatch
+import warnings
 import pandas as pd
 
 
@@ -164,8 +166,39 @@ class FileList:
             path = file.parent_path.rstrip('/') + '/' + file.name
             file_paths.append(path)
         return file_paths
-    
 
+
+class FileListDataFrameAccessor:
+    """Pandas DataFrame accessor for FileList tables (registered as `.filelist`).
+
+    Usage:
+        all_figures_file_df.filelist.filter(name_matches=['*_BatchPhoJonathanReplayFRC_*.png'])
+    """
+
+    def __init__(self, pandas_obj: pd.DataFrame):
+        self._validate(pandas_obj)
+        self._obj = pandas_obj
+
+    @staticmethod
+    def _validate(obj: pd.DataFrame) -> None:
+        if "name" not in obj.columns:
+            raise AttributeError("filelist accessor requires a 'name' column")
+
+    def filter(self, *, name_matches: Union[str, List[str]]) -> pd.DataFrame:
+        """Keep rows whose `name` matches any glob in `name_matches` (OR, case-sensitive)."""
+        patterns = [name_matches] if isinstance(name_matches, str) else list(name_matches)
+        names = self._obj["name"].astype(str)
+        mask = pd.Series(False, index=self._obj.index)
+        for pattern in patterns:
+            mask = mask | names.map(lambda n, p=pattern: fnmatch.fnmatchcase(n, p))
+        ## END for pattern in patterns....
+
+        return self._obj.loc[mask].copy()
+
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", UserWarning)
+    FileListDataFrameAccessor = pd.api.extensions.register_dataframe_accessor("filelist")(FileListDataFrameAccessor)
 
 
 def get_only_most_recent_log_files(log_file_df: pd.DataFrame, n_most_recent_files: int = 1) -> pd.DataFrame:

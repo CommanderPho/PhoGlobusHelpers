@@ -1,7 +1,8 @@
 """Local gen_scripts run-log status helpers for K:/scratch/gen_scripts (and similar).
 
 Lists newest .log/.err/.out per session folder, classifies Running/Finished/etc.,
-and optionally shows an inline Jupyter Accordion with recent full logs per session.
+and optionally shows an inline Jupyter Tab+Accordion browser: left-hand session
+tabs, each with an expanded accordion section per recent log.
 """
 from __future__ import annotations
 
@@ -15,37 +16,93 @@ from IPython.display import HTML, display
 
 from phoglobushelpers.compatibility_objects.Files import get_only_most_recent_log_files
 
-# Keep log Textarea lines unwrapped; scroll horizontally instead.
-_LOG_TEXTAREA_NOWRAP_HTML = """
-<style>
-.gen-scripts-log-textarea textarea {
-  white-space: pre !important;
-  overflow-wrap: normal !important;
-  word-wrap: normal !important;
-  word-break: normal !important;
-  overflow-x: auto !important;
+# Static HTML browser: no ipywidgets / Textarea / MutationObserver (those steal VS Code focus).
+_SESSION_LOG_BROWSER_SEQ = 0
+_SESSION_LOG_BROWSER_CSS = """
+.gen-scripts-log-browser {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+  max-height: 80vh;
+  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
+  background: var(--vscode-editor-background, var(--jp-layout-color0, transparent));
+  color: var(--vscode-editor-foreground, var(--jp-ui-font-color1, inherit));
 }
-</style>
-<script>
-(function () {
-  if (window.__genScriptsLogTextareaWrapOff) { return; }
-  window.__genScriptsLogTextareaWrapOff = true;
-  function applyWrapOff() {
-    document.querySelectorAll('.gen-scripts-log-textarea textarea').forEach(function (el) {
-      if (el.getAttribute('wrap') !== 'off') {
-        el.setAttribute('wrap', 'off');
-      }
-    });
-  }
-  applyWrapOff();
-  new MutationObserver(applyWrapOff).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
-})();
-</script>
+.gen-scripts-log-browser .tablist {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  width: max-content;
+  overflow-y: auto;
+  border-right: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
+}
+.gen-scripts-log-browser .tablist button {
+  appearance: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: inherit;
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+.gen-scripts-log-browser .tablist button.is-active {
+  background: var(--vscode-list-activeSelectionBackground, var(--jp-layout-color2, #e8e8e8));
+  border-left-color: var(--vscode-focusBorder, #007acc);
+  font-weight: 600;
+}
+.gen-scripts-log-browser .panels {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 10px 14px;
+}
+.gen-scripts-log-browser .session-heading {
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  white-space: nowrap;
+}
+.gen-scripts-log-browser .session-meta {
+  font-size: 0.85em;
+  opacity: 0.8;
+  margin: 0 0 10px 0;
+  white-space: nowrap;
+}
+.gen-scripts-log-browser details {
+  margin: 0 0 10px 0;
+  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ddd));
+}
+.gen-scripts-log-browser summary {
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 8px 10px;
+  font-weight: 600;
+}
+.gen-scripts-log-browser .log-path {
+  font-size: 0.85em;
+  opacity: 0.8;
+  margin: 0 10px 6px;
+  white-space: nowrap;
+}
+.gen-scripts-log-browser pre {
+  white-space: pre;
+  overflow: auto;
+  max-height: 480px;
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--vscode-editor-font-family, var(--jp-code-font-family, ui-monospace, Consolas, monospace));
+  font-size: 12px;
+  line-height: 1.35;
+  user-select: text;
+}
 """
-_LOG_TEXTAREA_NOWRAP_DISPLAYED = False
 
 PathLike = Union[str, Path]
 DateLike = Union[str, date, datetime]
@@ -356,12 +413,117 @@ def build_session_status_df(
     return status_df.sort_values(by=["log_mtime"], ascending=False, na_position="last").reset_index(drop=True)
 
 
-def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_lines: int = 0, most_recent_n_logs: int = 3, cutoff_date: Optional[DateLike] = None, max_num_day_ago: Optional[int] = 4, n_most_recent_files: int = 1, most_recent_only_log_file_df: Optional[pd.DataFrame] = None, **kwargs) -> pd.DataFrame:
-    """Display status table + Accordion of recent logs (one section per session).
+def _build_session_log_browser_html(
+    recent_logs: pd.DataFrame,
+    status_df: pd.DataFrame,
+    n_tail_lines: int,
+) -> str:
+    """Left-hand session tabs + expanded ``<details>`` accordion per log.
 
-    Each session section shows up to ``most_recent_n_logs`` ``.log`` files whose
-    ``last_modified`` is newer than ``cutoff_date`` (default: ``max_num_day_ago``
-    days before now). Sessions are ordered by newest log mtime.
+    Static HTML/CSS/JS only. ``mousedown`` preventDefault keeps clicks from
+    stealing VS Code editor focus. Titles are nowrap (wide screens).
+    """
+    global _SESSION_LOG_BROWSER_SEQ
+    _SESSION_LOG_BROWSER_SEQ += 1
+    browser_id = f"gen-scripts-log-browser-{_SESSION_LOG_BROWSER_SEQ}"
+
+    session_order = (
+        recent_logs.groupby("parent_path", sort=False)["last_modified"]
+        .max()
+        .sort_values(ascending=False)
+    )
+    status_by_parent = (
+        status_df.set_index("parent_path")["status"].to_dict()
+        if not status_df.empty
+        else {}
+    )
+
+    tab_buttons = []
+    panels = []
+    for session_i, parent_path in enumerate(session_order.index):
+        session_logs = recent_logs[recent_logs["parent_path"] == parent_path]
+        session_name = Path(parent_path).name
+        status = status_by_parent.get(parent_path, "?")
+        newest_str = _format_log_mtime(session_order.loc[parent_path])
+        n_shown = len(session_logs)
+        is_active = session_i == 0
+        active_cls = " is-active" if is_active else ""
+        tab_label = html.escape(f"[{status}] {session_name}")
+        tab_buttons.append(
+            f'<button type="button" tabindex="-1" data-session-idx="{session_i}" '
+            f'class="{active_cls.strip()}" role="tab" aria-selected="{str(is_active).lower()}">'
+            f"{tab_label}</button>"
+        )
+
+        log_blocks = []
+        for log_row in session_logs.itertuples(index=False):
+            tail = read_log_tail(log_row.log_path, n_lines=n_tail_lines)
+            mtime_str = _format_log_mtime(log_row.last_modified)
+            summary = html.escape(
+                f"{log_row.name}  ·  {mtime_str}  ·  size={log_row.size}"
+            )
+            log_blocks.append(
+                "<details open>"
+                f"<summary tabindex='-1'>{summary}</summary>"
+                f"<div class='log-path'><code>{html.escape(str(log_row.log_path))}</code></div>"
+                f"<pre>{html.escape(tail)}</pre>"
+                "</details>"
+            )
+        ## END for log_row in session_logs.itertuples(index=False)....
+
+        hidden_attr = "" if is_active else " hidden"
+        panels.append(
+            f'<div class="panel{active_cls}" data-session-idx="{session_i}" role="tabpanel"{hidden_attr}>'
+            f'<div class="session-heading">[{html.escape(str(status))}] {html.escape(session_name)}</div>'
+            f'<div class="session-meta">{html.escape(newest_str)}  ·  {n_shown} log(s)</div>'
+            f"{''.join(log_blocks)}"
+            "</div>"
+        )
+    ## END for session_i, parent_path in enumerate(session_order.index)....
+
+    return (
+        f"<style>{_SESSION_LOG_BROWSER_CSS}</style>"
+        f'<div id="{browser_id}" class="gen-scripts-log-browser">'
+        f'<div class="tablist" role="tablist">{"".join(tab_buttons)}</div>'
+        f'<div class="panels">{"".join(panels)}</div>'
+        "</div>"
+        "<script>(function () {"
+        f'var root = document.getElementById("{browser_id}");'
+        "if (!root) { return; }"
+        "function setSession(idx) {"
+        '  root.querySelectorAll("[data-session-idx]").forEach(function (el) {'
+        '    var on = el.getAttribute("data-session-idx") === idx;'
+        '    el.classList.toggle("is-active", on);'
+        '    if (el.tagName === "BUTTON") {'
+        '      el.setAttribute("aria-selected", on ? "true" : "false");'
+        "    } else {"
+        "      el.hidden = !on;"
+        "    }"
+        "  });"
+        "}"
+        'root.addEventListener("mousedown", function (e) {'
+        '  var btn = e.target.closest("button[data-session-idx]");'
+        "  if (!btn || !root.contains(btn)) { return; }"
+        "  e.preventDefault();"
+        '  setSession(btn.getAttribute("data-session-idx"));'
+        "});"
+        'root.querySelectorAll("summary").forEach(function (el) {'
+        '  el.addEventListener("mousedown", function (e) { e.preventDefault(); });'
+        "});"
+        "})();</script>"
+    )
+
+
+def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_lines: int = 0, most_recent_n_logs: int = 3, cutoff_date: Optional[DateLike] = None, max_num_day_ago: Optional[int] = 4, n_most_recent_files: int = 1, most_recent_only_log_file_df: Optional[pd.DataFrame] = None, **kwargs) -> pd.DataFrame:
+    """Display status table + left-tab session browser of recent logs.
+
+    Sessions are left-hand tabs (newest log mtime first). Each session tab
+    contains one expanded accordion (``<details open>``) per ``.log`` (up to
+    ``most_recent_n_logs`` files newer than ``cutoff_date``, default:
+    ``max_num_day_ago`` days before now).
+
+    Rendered as static HTML so the browser does not steal VS Code focus
+    (no ipywidgets Tab/Accordion/Textarea, no MutationObserver).
 
     By default ``n_tail_lines=0`` shows each log in full; set a positive value to
     show only the last N lines.
@@ -371,15 +533,8 @@ def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_
     folder + filename. Only matched rows are kept for status/selection so stale
     copy mtimes cannot win. Log contents still come from local paths under ``root``.
 
-    Returns the session status DataFrame. Requires ipywidgets in the Jupyter kernel.
+    Returns the session status DataFrame.
     """
-    import ipywidgets as widgets
-
-    global _LOG_TEXTAREA_NOWRAP_DISPLAYED
-    if not _LOG_TEXTAREA_NOWRAP_DISPLAYED:
-        display(HTML(_LOG_TEXTAREA_NOWRAP_HTML))
-        _LOG_TEXTAREA_NOWRAP_DISPLAYED = True
-
     root_path = Path(root)
     resolved_cutoff = resolve_cutoff_date(
         cutoff_date=cutoff_date, max_num_day_ago=max_num_day_ago
@@ -404,67 +559,8 @@ def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_
         display_status = status_df.iloc[0:0].copy()
     display(display_status)
 
-    # One accordion entry per session; newest session first.
-    children = []
-    titles = []
     if not recent_logs.empty:
-        session_order = (
-            recent_logs.groupby("parent_path", sort=False)["last_modified"]
-            .max()
-            .sort_values(ascending=False)
-        )
-        status_by_parent = (
-            status_df.set_index("parent_path")["status"].to_dict()
-            if not status_df.empty
-            else {}
-        )
-        for parent_path in session_order.index:
-            session_logs = recent_logs[recent_logs["parent_path"] == parent_path]
-            log_panels = []
-            for log_row in session_logs.itertuples(index=False):
-                tail = read_log_tail(log_row.log_path, n_lines=n_tail_lines)
-                mtime_str = _format_log_mtime(log_row.last_modified)
-                header = widgets.HTML(
-                    value=(
-                        f"<div style='font-weight:600; margin:4px 0 2px 0;'>"
-                        f"{html.escape(str(log_row.name))}</div>"
-                        f"<div style='font-size:0.85em; opacity:0.8; margin-bottom:4px;'>"
-                        f"size={log_row.size}  ·  {html.escape(mtime_str)}<br/>"
-                        f"<code>{html.escape(str(log_row.log_path))}</code>"
-                        f"</div>"
-                    )
-                )
-                textarea = widgets.Textarea(
-                    value=tail,
-                    layout=widgets.Layout(width="100%", height="480px"),
-                    disabled=True,
-                )
-                textarea.add_class("gen-scripts-log-textarea")
-                log_panels.append(widgets.VBox([header, textarea]))
-            ## END for log_row in session_logs.itertuples(index=False)....
-
-            n_shown = len(log_panels)
-            children.append(
-                widgets.VBox(
-                    log_panels,
-                    layout=widgets.Layout(width="100%"),
-                )
-            )
-            session_name = Path(parent_path).name
-            status = status_by_parent.get(parent_path, "?")
-            newest_mtime = session_order.loc[parent_path]
-            newest_str = _format_log_mtime(newest_mtime)
-            titles.append(
-                f"[{status}] {session_name}  ·  {newest_str}  ·  {n_shown} log(s)"
-            )
-        ## END for parent_path in session_order.index....
-
-    if children:
-        accordion = widgets.Accordion(children=children)
-        for i, title in enumerate(titles):
-            accordion.set_title(i, title)
-        ## END for i, title in enumerate(titles)....
-        display(accordion)
+        display(HTML(_build_session_log_browser_html(recent_logs, status_df, n_tail_lines)))
     else:
         cutoff_msg = (
             f" newer than {resolved_cutoff.isoformat()}"
