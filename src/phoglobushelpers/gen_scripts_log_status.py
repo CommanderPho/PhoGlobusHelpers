@@ -20,12 +20,22 @@ from phoglobushelpers.compatibility_objects.Files import get_only_most_recent_lo
 # Static HTML browser: no ipywidgets / Textarea / MutationObserver (those steal VS Code focus).
 _SESSION_LOG_BROWSER_SEQ = 0
 _SESSION_LOG_BROWSER_CSS = """
+.gen-scripts-log-browser-wrap {
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
 .gen-scripts-log-browser {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  width: max-content;
-  min-width: 100%;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   max-height: 80vh;
   border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
   background: var(--vscode-editor-background, var(--jp-layout-color0, transparent));
@@ -36,6 +46,9 @@ _SESSION_LOG_BROWSER_CSS = """
   flex-direction: column;
   flex: 0 0 auto;
   width: max-content;
+  max-width: min(28em, 40%);
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
 }
@@ -45,6 +58,8 @@ _SESSION_LOG_BROWSER_CSS = """
   width: 100%;
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: none;
   border-left: 3px solid transparent;
   background: transparent;
@@ -60,39 +75,113 @@ _SESSION_LOG_BROWSER_CSS = """
 }
 .gen-scripts-log-browser .panels {
   flex: 1 1 auto;
-  overflow: auto;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 10px 14px;
+}
+.gen-scripts-log-browser .panel {
+  min-width: 0;
+  max-width: 100%;
 }
 .gen-scripts-log-browser .session-heading {
   font-weight: 600;
   margin: 0 0 4px 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gen-scripts-log-browser .session-meta {
   font-size: 0.85em;
   opacity: 0.8;
   margin: 0 0 10px 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gen-scripts-log-browser details {
   margin: 0 0 10px 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ddd));
 }
 .gen-scripts-log-browser summary {
-  white-space: nowrap;
   cursor: pointer;
   padding: 8px 10px;
   font-weight: 600;
+  overflow: hidden;
   background: var(--vscode-sideBar-background, var(--jp-layout-color1, rgba(127,127,127,0.08)));
+}
+.gen-scripts-log-browser .log-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.gen-scripts-log-browser .log-summary-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.gen-scripts-log-browser .log-summary-full {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gen-scripts-log-browser .log-summary-keys {
+  display: block;
+  margin-top: 2px;
+  font-weight: 500;
+  font-size: 0.92em;
+  opacity: 0.9;
+  letter-spacing: 0.01em;
+}
+.gen-scripts-log-browser .log-summary-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.gen-scripts-log-browser .log-action {
+  appearance: none;
+  display: inline-block;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 3px 8px;
+  cursor: pointer;
+  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
+  border-radius: 3px;
+  background: var(--vscode-button-secondaryBackground, var(--jp-layout-color2, rgba(127,127,127,0.12)));
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.gen-scripts-log-browser .log-action:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--jp-layout-color3, rgba(127,127,127,0.22)));
+}
+.gen-scripts-log-browser .log-action.is-copied {
+  border-color: #3fb950;
+}
+.gen-scripts-log-browser textarea.log-full-text {
+  display: none;
 }
 .gen-scripts-log-browser .log-path {
   font-size: 0.85em;
   opacity: 0.8;
   margin: 6px 10px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gen-scripts-log-browser .log-scroll {
   max-height: 480px;
+  max-width: 100%;
   overflow: auto;
   background: var(--vscode-terminal-background, #0d1117);
   color: var(--vscode-terminal-foreground, #e6edf3);
@@ -196,16 +285,56 @@ def _err_has_traceback(err_path: Optional[Path]) -> bool:
 
 
 def _format_log_mtime(log_mtime) -> str:
-    """Compact UTC timestamp for accordion titles; ``?`` when missing."""
+    """Compact local 12-hour timestamp for accordion titles; ``?`` when missing."""
     if log_mtime is None or (isinstance(log_mtime, float) and pd.isna(log_mtime)):
         return "?"
     try:
         ts = pd.to_datetime(log_mtime, utc=True)
         if pd.isna(ts):
             return "?"
-        return ts.strftime("%Y-%m-%d %H:%M UTC")
-    except (TypeError, ValueError):
+        local_dt = ts.to_pydatetime().astimezone()
+        hour_12 = local_dt.hour % 12 or 12
+        ampm = "AM" if local_dt.hour < 12 else "PM"
+        return f"{local_dt.strftime('%Y-%m-%d')} {hour_12}:{local_dt.strftime('%M')} {ampm}"
+    except (TypeError, ValueError, OSError, OverflowError):
         return "?"
+
+
+_LOG_QCLU_RE = re.compile(r"qclu_\d+", re.IGNORECASE)
+_LOG_TBIN_RE = re.compile(r"tbin_(\d+ms)", re.IGNORECASE)
+_LOG_KIND_AFTER_TBIN_RE = re.compile(r"tbin_\d+ms[_-]([A-Za-z]+)", re.IGNORECASE)
+_LOG_KIND_FALLBACK_RE = re.compile(r"_(Figure|Final|Continued)(?:[-.]|$)", re.IGNORECASE)
+
+
+def _parse_log_filename_keys(name: str) -> list[str]:
+    """Pull ``qclu_*``, tbin duration, and Figure/Final/Continued from a log filename."""
+    stem = Path(str(name)).name
+    keys: list[str] = []
+    qclu = _LOG_QCLU_RE.search(stem)
+    if qclu:
+        keys.append(qclu.group(0))
+    tbin = _LOG_TBIN_RE.search(stem)
+    if tbin:
+        keys.append(tbin.group(1))
+    kind_match = _LOG_KIND_AFTER_TBIN_RE.search(stem) or _LOG_KIND_FALLBACK_RE.search(stem)
+    if kind_match:
+        keys.append(kind_match.group(1))
+    return keys
+
+
+def _editor_open_uris(path: PathLike) -> tuple[str, str, str]:
+    """Return ``(file_uri, vscode_uri, cursor_uri)`` for opening ``path`` in an editor tab."""
+    p = Path(path)
+    try:
+        resolved = p.resolve()
+    except OSError:
+        resolved = p
+    posix = resolved.as_posix()
+    try:
+        file_uri = resolved.as_uri()
+    except ValueError:
+        file_uri = f"file:///{posix}"
+    return file_uri, f"vscode://file/{posix}", f"cursor://file/{posix}"
 
 
 _LOG_HIGHLIGHT_RE = re.compile(
@@ -489,7 +618,8 @@ def _build_session_log_browser_html(
     """Left-hand session tabs + expanded ``<details>`` accordion per log.
 
     Static HTML/CSS/JS only. ``mousedown`` preventDefault keeps clicks from
-    stealing VS Code editor focus. Titles are nowrap (wide screens).
+    stealing VS Code editor focus. The widget is capped to the notebook cell
+    / viewport so log ``<pre>`` lines scroll inside ``.log-scroll``.
     """
     global _SESSION_LOG_BROWSER_SEQ
     _SESSION_LOG_BROWSER_SEQ += 1
@@ -519,30 +649,76 @@ def _build_session_log_browser_html(
         tab_label = html.escape(f"[{status}] {session_name}")
         tab_buttons.append(
             f'<button type="button" tabindex="-1" data-session-idx="{session_i}" '
-            f'class="{active_cls.strip()}" role="tab" aria-selected="{str(is_active).lower()}">'
-            f"{tab_label}</button>"
+            f'class="{active_cls.strip()}" role="tab" aria-selected="{str(is_active).lower()}" '
+            f'title="{tab_label}">{tab_label}</button>'
         )
 
         log_blocks = []
         for log_row in session_logs.itertuples(index=False):
-            tail = read_log_tail(log_row.log_path, n_lines=n_tail_lines)
+            full_text = read_log_tail(log_row.log_path, n_lines=0)
+            display_text = (
+                full_text
+                if n_tail_lines <= 0
+                else "".join(full_text.splitlines(True)[-n_tail_lines:])
+            )
             mtime_str = _format_log_mtime(log_row.last_modified)
-            summary = html.escape(
+            keys = _parse_log_filename_keys(log_row.name)
+            keys_str = "  ·  ".join(keys)
+            summary_full = html.escape(
                 f"{log_row.name}  ·  {mtime_str}  ·  size={log_row.size}"
             )
+            title_plain = f"{log_row.name}  ·  {mtime_str}  ·  size={log_row.size}"
+            if keys_str:
+                title_plain = f"{log_row.name}  ·  {keys_str}  ·  {mtime_str}  ·  size={log_row.size}"
+            keys_html = (
+                f"<span class='log-summary-keys'>{html.escape(keys_str)}</span>"
+                if keys_str
+                else ""
+            )
+            file_uri, vscode_uri, cursor_uri = _editor_open_uris(log_row.log_path)
+            full_copy_html = (
+                ""
+                if n_tail_lines <= 0
+                else (
+                    f"<textarea class='log-full-text' hidden readonly>"
+                    f"{html.escape(full_text)}</textarea>"
+                )
+            )
+            actions_html = (
+                "<span class='log-summary-actions'>"
+                f"<a class='log-action' data-open-editor tabindex='-1' "
+                f"href='{html.escape(file_uri, quote=True)}' "
+                f"data-vscode-uri='{html.escape(vscode_uri, quote=True)}' "
+                f"data-cursor-uri='{html.escape(cursor_uri, quote=True)}' "
+                f"title='Open in editor'>Open</a>"
+                "<button type='button' class='log-action' data-copy-log tabindex='-1' "
+                "title='Copy log to clipboard'>Copy</button>"
+                "</span>"
+            )
+            log_path_html = html.escape(str(log_row.log_path))
             log_blocks.append(
                 "<details open>"
-                f"<summary tabindex='-1'>{summary}</summary>"
-                f"<div class='log-path'><code>{html.escape(str(log_row.log_path))}</code></div>"
-                f"<div class='log-scroll'><pre>{_highlight_log_html(tail)}</pre></div>"
+                f"<summary tabindex='-1' title='{html.escape(title_plain)}'>"
+                f"<div class='log-summary-head'>"
+                f"<div class='log-summary-main'>"
+                f"<span class='log-summary-full'>{summary_full}</span>"
+                f"{keys_html}"
+                f"</div>"
+                f"{actions_html}"
+                f"</div>"
+                "</summary>"
+                f"{full_copy_html}"
+                f"<div class='log-path' title='{log_path_html}'><code>{log_path_html}</code></div>"
+                f"<div class='log-scroll'><pre>{_highlight_log_html(display_text)}</pre></div>"
                 "</details>"
             )
         ## END for log_row in session_logs.itertuples(index=False)....
 
         hidden_attr = "" if is_active else " hidden"
+        heading = f"[{html.escape(str(status))}] {html.escape(session_name)}"
         panels.append(
             f'<div class="panel{active_cls}" data-session-idx="{session_i}" role="tabpanel"{hidden_attr}>'
-            f'<div class="session-heading">[{html.escape(str(status))}] {html.escape(session_name)}</div>'
+            f'<div class="session-heading" title="{heading}">{heading}</div>'
             f'<div class="session-meta">{html.escape(newest_str)}  ·  {n_shown} log(s)</div>'
             f"{''.join(log_blocks)}"
             "</div>"
@@ -551,10 +727,11 @@ def _build_session_log_browser_html(
 
     return (
         f"<style>{_SESSION_LOG_BROWSER_CSS}</style>"
+        f'<div class="gen-scripts-log-browser-wrap">'
         f'<div id="{browser_id}" class="gen-scripts-log-browser">'
         f'<div class="tablist" role="tablist">{"".join(tab_buttons)}</div>'
         f'<div class="panels">{"".join(panels)}</div>'
-        "</div>"
+        "</div></div>"
         "<script>(function () {"
         f'var root = document.getElementById("{browser_id}");'
         "if (!root) { return; }"
@@ -569,6 +746,14 @@ def _build_session_log_browser_html(
         "    }"
         "  });"
         "}"
+        "function fitWidth() {"
+        "  var cap = Math.max(640, (window.innerWidth || 1024) - 48);"
+        "  root.style.maxWidth = cap + 'px';"
+        "  var wrap = root.parentElement;"
+        "  if (wrap) { wrap.style.maxWidth = cap + 'px'; }"
+        "}"
+        "fitWidth();"
+        "window.addEventListener('resize', fitWidth);"
         'root.addEventListener("mousedown", function (e) {'
         '  var btn = e.target.closest("button[data-session-idx]");'
         "  if (!btn || !root.contains(btn)) { return; }"
@@ -576,7 +761,59 @@ def _build_session_log_browser_html(
         '  setSession(btn.getAttribute("data-session-idx"));'
         "});"
         'root.querySelectorAll("summary").forEach(function (el) {'
-        '  el.addEventListener("mousedown", function (e) { e.preventDefault(); });'
+        '  el.addEventListener("mousedown", function (e) {'
+        '    if (e.target.closest(".log-action")) { return; }'
+        "    e.preventDefault();"
+        "  });"
+        "});"
+        'root.addEventListener("click", function (e) {'
+        '  var action = e.target.closest(".log-action");'
+        "  if (!action || !root.contains(action)) { return; }"
+        "  e.stopPropagation();"
+        '  if (action.hasAttribute("data-copy-log")) {'
+        "    e.preventDefault();"
+        "    var details = action.closest('details');"
+        "    var src = details && (details.querySelector('textarea.log-full-text') || details.querySelector('.log-scroll pre'));"
+        "    var text = '';"
+        "    if (src) {"
+        "      text = (src.tagName === 'TEXTAREA') ? (src.value || '') : (src.textContent || '');"
+        "    }"
+        "    function setCopyLabel(ok) {"
+        "      action.textContent = ok ? 'Copied' : 'Copy failed';"
+        "      action.classList.toggle('is-copied', !!ok);"
+        "      setTimeout(function () {"
+        "        action.textContent = 'Copy';"
+        "        action.classList.remove('is-copied');"
+        "      }, 1400);"
+        "    }"
+        "    function fallbackCopy() {"
+        "      var ta = document.createElement('textarea');"
+        "      ta.value = text;"
+        "      ta.setAttribute('readonly', '');"
+        "      ta.style.position = 'fixed';"
+        "      ta.style.left = '-9999px';"
+        "      document.body.appendChild(ta);"
+        "      ta.select();"
+        "      var ok = false;"
+        "      try { ok = document.execCommand('copy'); } catch (err) {}"
+        "      document.body.removeChild(ta);"
+        "      setCopyLabel(ok);"
+        "    }"
+        "    if (navigator.clipboard && navigator.clipboard.writeText) {"
+        "      navigator.clipboard.writeText(text).then(function () { setCopyLabel(true); }, fallbackCopy);"
+        "    } else {"
+        "      fallbackCopy();"
+        "    }"
+        "    return;"
+        "  }"
+        '  if (action.hasAttribute("data-open-editor")) {'
+        "    e.preventDefault();"
+        "    var uris = [action.getAttribute('data-vscode-uri'), action.getAttribute('data-cursor-uri'), action.getAttribute('href')];"
+        "    var i;"
+        "    for (i = 0; i < uris.length; i++) {"
+        "      if (uris[i]) { window.open(uris[i], '_blank'); break; }"
+        "    }"
+        "  }"
         "});"
         "})();</script>"
     )
