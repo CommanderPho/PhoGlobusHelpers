@@ -7,6 +7,7 @@ tabs, each with an expanded accordion section per recent log.
 from __future__ import annotations
 
 import html
+import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Union
@@ -82,26 +83,46 @@ _SESSION_LOG_BROWSER_CSS = """
   cursor: pointer;
   padding: 8px 10px;
   font-weight: 600;
+  background: var(--vscode-sideBar-background, var(--jp-layout-color1, rgba(127,127,127,0.08)));
 }
 .gen-scripts-log-browser .log-path {
   font-size: 0.85em;
   opacity: 0.8;
-  margin: 0 10px 6px;
+  margin: 6px 10px;
   white-space: nowrap;
 }
-.gen-scripts-log-browser pre {
-  white-space: pre;
-  overflow: auto;
+.gen-scripts-log-browser .log-scroll {
   max-height: 480px;
+  overflow: auto;
+  background: var(--vscode-terminal-background, #0d1117);
+  color: var(--vscode-terminal-foreground, #e6edf3);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+  border-left: 3px solid var(--vscode-focusBorder, #3b82f6);
+}
+.gen-scripts-log-browser .log-scroll pre {
+  white-space: pre;
+  overflow: visible;
+  max-height: none;
   width: max-content;
   min-width: 100%;
   margin: 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
+  background: transparent;
+  color: inherit;
   font-family: var(--vscode-editor-font-family, var(--jp-code-font-family, ui-monospace, Consolas, monospace));
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.4;
   user-select: text;
 }
+.gen-scripts-log-browser .tok-error { color: #f85149; font-weight: 600; }
+.gen-scripts-log-browser .tok-ok { color: #3fb950; font-weight: 600; }
+.gen-scripts-log-browser .tok-info { color: #d2a8ff; }
+.gen-scripts-log-browser .tok-ts { color: #7ee787; }
+.gen-scripts-log-browser .tok-host { color: #79c0ff; }
+.gen-scripts-log-browser .tok-path { color: #e3b341; }
+.gen-scripts-log-browser .tok-str { color: #a5d6ff; }
+.gen-scripts-log-browser .tok-sep { color: #8b949e; }
+.gen-scripts-log-browser .tok-key { color: #ffa657; }
 """
 
 PathLike = Union[str, Path]
@@ -185,6 +206,53 @@ def _format_log_mtime(log_mtime) -> str:
         return ts.strftime("%Y-%m-%d %H:%M UTC")
     except (TypeError, ValueError):
         return "?"
+
+
+_LOG_HIGHLIGHT_RE = re.compile(
+    r"(?P<error>Traceback \(most recent call last\):|(?<![\w.])(?:AssertionError|FileNotFoundError|ValueError|TypeError|RuntimeError|KeyError|Exception|Error)(?![\w.]))"
+    r"|(?P<ok>\bALL DONE!?)"
+    r"|(?P<done>^[ \t]*done\.?[ \t]*$)"
+    r"|(?P<info>\[[A-Z][A-Z_ ]*\])"
+    r"|(?P<ts>\d{4}-\d{2}-\d{2}[ T_]\d{2}[:\-]\d{2}[:\-]\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)"
+    r"|(?P<host>\b[a-z0-9-]+(?:\.[a-z0-9-]+){2,}\b)"
+    r"|(?P<path>(?:/[^\s:'\"]+)|(?:[A-Za-z]:[\\/][^\s'\"]+))"
+    r"|(?P<str>\"[^\"\n]*\"|'[^'\n]*')"
+    r"|(?P<sep>[=]{6,}|[-]{6,})"
+    r"|(?P<key>\b[A-Za-z_][\w.]*(?=\s*:))",
+    flags=re.MULTILINE,
+)
+_LOG_TOKEN_CLASS = {
+    "error": "tok-error",
+    "ok": "tok-ok",
+    "done": "tok-ok",
+    "info": "tok-info",
+    "ts": "tok-ts",
+    "host": "tok-host",
+    "path": "tok-path",
+    "str": "tok-str",
+    "sep": "tok-sep",
+    "key": "tok-key",
+}
+
+
+def _highlight_log_html(text: str) -> str:
+    """Escape log text and wrap timestamps/levels/paths/errors in token spans."""
+    parts = []
+    pos = 0
+    for match in _LOG_HIGHLIGHT_RE.finditer(text):
+        if match.start() > pos:
+            parts.append(html.escape(text[pos:match.start()]))
+        cls = _LOG_TOKEN_CLASS.get(match.lastgroup or "", "")
+        escaped = html.escape(match.group())
+        if cls:
+            parts.append(f'<span class="{cls}">{escaped}</span>')
+        else:
+            parts.append(escaped)
+        pos = match.end()
+    ## END for match in _LOG_HIGHLIGHT_RE.finditer(text)....
+
+    parts.append(html.escape(text[pos:]))
+    return "".join(parts)
 
 
 def _coerce_utc_datetime(value: Optional[DateLike]) -> Optional[datetime]:
@@ -466,7 +534,7 @@ def _build_session_log_browser_html(
                 "<details open>"
                 f"<summary tabindex='-1'>{summary}</summary>"
                 f"<div class='log-path'><code>{html.escape(str(log_row.log_path))}</code></div>"
-                f"<pre>{html.escape(tail)}</pre>"
+                f"<div class='log-scroll'><pre>{_highlight_log_html(tail)}</pre></div>"
                 "</details>"
             )
         ## END for log_row in session_logs.itertuples(index=False)....

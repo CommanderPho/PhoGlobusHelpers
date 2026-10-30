@@ -27,6 +27,7 @@
 			"list.activeSelectionBackground": "#5b21b6aa",
 			"list.inactiveSelectionBackground": "#4c1d9580",
 			"list.hoverBackground": "#6b21a850"
-		}
+		},
+		"diffEditor.renderSideBySide": true
 	}
 }
