@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import html
 import re
+import tempfile
+import webbrowser
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from IPython.display import HTML, display
@@ -139,6 +142,17 @@ _SESSION_LOG_BROWSER_CSS = """
   opacity: 0.9;
   letter-spacing: 0.01em;
 }
+.gen-scripts-log-browser .log-summary-job {
+  display: block;
+  margin-top: 2px;
+  font-weight: 500;
+  font-size: 0.92em;
+  letter-spacing: 0.01em;
+}
+.gen-scripts-log-browser .job-status-completed { color: #3fb950; font-weight: 600; }
+.gen-scripts-log-browser .job-status-running { color: #79c0ff; font-weight: 600; }
+.gen-scripts-log-browser .job-status-failed { color: #f85149; font-weight: 600; }
+.gen-scripts-log-browser .job-status-unknown { opacity: 0.75; font-weight: 600; }
 .gen-scripts-log-browser .log-summary-actions {
   flex: 0 0 auto;
   display: flex;
@@ -223,6 +237,21 @@ _TINY_LOG_SIZE: int = 5000
 _LARGE_LOG_SIZE: int = 5000
 _RUNNING_AGE_HOURS: float = 1.0
 _EARLY_AGE_HOURS: float = 6.0
+
+
+def _resolve_log_local_tz():
+    """Great Lakes log lines are local wall clock without offsets.
+
+    Prefer ``America/Detroit`` (needs ``tzdata`` on Windows). Fall back to fixed
+    EST (UTC-5) when IANA zones are unavailable.
+    """
+    try:
+        return ZoneInfo("America/Detroit")
+    except Exception:
+        return timezone(timedelta(hours=-5))
+
+
+_LOG_LOCAL_TZ = _resolve_log_local_tz()
 
 
 def list_local_gen_scripts_files(root: PathLike) -> pd.DataFrame:
@@ -320,6 +349,302 @@ def _parse_log_filename_keys(name: str) -> list[str]:
     if kind_match:
         keys.append(kind_match.group(1))
     return keys
+
+
+_SLURM_JOB_ID_RE = re.compile(r"-(\d+)\.out$", re.IGNORECASE)
+_SLURM_DEBUG_LOG_RE = re.compile(
+    r"(?P<log>debug_[^\s\"'/\\]+\.log)",
+    re.IGNORECASE,
+)
+_SLURM_LOGGER_STRING_RE = re.compile(
+    r'full_logger_string\s*=\s*"(?P<logger>[^"]+)"',
+    re.IGNORECASE,
+)
+_BATCH_LOAD_START_RE = re.compile(
+    r"\[TIMING START\]\s+batch_load_session\s+@\s+"
+    r"(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})",
+)
+_LOG_LINE_TS_RE = re.compile(
+    r"(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)"
+)
+_COMPLETED_RE = re.compile(
+    r"finished run:\s*SessionBatchProgress\.COMPLETED|\bALL DONE!?",
+    re.IGNORECASE,
+)
+_FAILED_PROGRESS_RE = re.compile(
+    r"finished run:\s*SessionBatchProgress\.FAILED"
+    r"|SessionBatchProgress\.FAILED",
+    re.IGNORECASE,
+)
+_ERRORS_NONEMPTY_RE = re.compile(
+    r"^errors:\s*(?!None\b|null\b|$)\S",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _slurm_job_id_from_name(name: str) -> Optional[str]:
+    """Extract trailing Slurm job ID from ``slurm_*-{id}.out`` filename."""
+    match = _SLURM_JOB_ID_RE.search(Path(str(name)).name)
+    return match.group(1) if match else None
+
+
+def _slurm_display_name_from_name(name: str) -> Optional[str]:
+    """Strip ``slurm_`` prefix and ``-{id}.out`` suffix for OOD-style job Name."""
+    stem = Path(str(name)).name
+    if not stem.lower().startswith("slurm_") or not stem.lower().endswith(".out"):
+        return None
+    body = stem[len("slurm_") :]
+    id_match = _SLURM_JOB_ID_RE.search(stem)
+    if id_match:
+        body = body[: -(len(id_match.group(0)))]
+    return body or None
+
+
+def _format_duration_hms(seconds: Optional[float]) -> Optional[str]:
+    """Format non-negative seconds as ``HH:MM:SS`` (OOD Time Used style).
+
+    Fractional seconds are truncated (floor), matching whole-second Slurm displays.
+    """
+    if seconds is None:
+        return None
+    total = int(max(0, float(seconds)))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _read_file_head(path: PathLike, max_bytes: int = 4096) -> str:
+    """Read up to ``max_bytes`` from the start of a file (UTF-8, replace errors)."""
+    p = Path(path)
+    if not p.is_file():
+        return ""
+    try:
+        with p.open("rb") as fh:
+            raw = fh.read(max_bytes)
+        return raw.decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _debug_log_stem(name: str) -> str:
+    """Basename of a debug log without ``.log`` (match key for slurm headers)."""
+    stem = Path(str(name)).name
+    if stem.lower().endswith(".log"):
+        return stem[:-4]
+    return stem
+
+
+def _match_keys_from_slurm_header(header: str) -> list[str]:
+    """Extract debug-log match keys from a short ``slurm_*.out`` header sample."""
+    keys: list[str] = []
+    for match in _SLURM_DEBUG_LOG_RE.finditer(header):
+        keys.append(_debug_log_stem(match.group("log")))
+    logger_match = _SLURM_LOGGER_STRING_RE.search(header)
+    if logger_match:
+        logger = logger_match.group("logger").strip()
+        # Headers often omit the ``debug_`` prefix in full_logger_string.
+        if logger.lower().startswith("debug_"):
+            keys.append(_debug_log_stem(logger if logger.lower().endswith(".log") else f"{logger}.log"))
+        else:
+            keys.append(f"debug_{logger}")
+    # Preserve order, drop duplicates.
+    seen: set[str] = set()
+    unique: list[str] = []
+    for key in keys:
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(key)
+    return unique
+
+
+def build_slurm_out_lookup(file_df: pd.DataFrame) -> dict[str, dict[str, dict]]:
+    """Index ``slurm_*.out`` rows by ``parent_path`` then debug-log match key.
+
+    Each value dict has: ``job_id``, ``job_name``, ``out_path``, ``out_mtime``,
+    ``out_size``. Match keys come from the first ~4KB of each ``.out`` header
+    (``final_log_file_path`` / ``full_logger_string``).
+    """
+    empty: dict[str, dict[str, dict]] = {}
+    if file_df is None or file_df.empty:
+        return empty
+
+    outs = file_df[file_df["name"].astype(str).str.lower().str.endswith(".out")].copy()
+    if outs.empty:
+        return empty
+
+    outs = outs[outs["name"].astype(str).str.lower().str.startswith("slurm_")]
+    if outs.empty:
+        return empty
+
+    lookup: dict[str, dict[str, dict]] = {}
+    for row in outs.itertuples(index=False):
+        parent = str(row.parent_path)
+        name = str(row.name)
+        job_id = _slurm_job_id_from_name(name)
+        if not job_id:
+            continue
+        out_path = Path(parent) / name
+        header = _read_file_head(out_path, max_bytes=4096)
+        match_keys = _match_keys_from_slurm_header(header)
+        if not match_keys:
+            # Fallback: kind token from slurm name (Clean/Continued/Final/Figure).
+            kind_keys = _parse_log_filename_keys(name)
+            if kind_keys:
+                match_keys = [f"__kind__{kind_keys[-1].lower()}"]
+        info = {
+            "job_id": job_id,
+            "job_name": _slurm_display_name_from_name(name),
+            "out_path": str(out_path),
+            "out_mtime": pd.to_datetime(row.last_modified, utc=True),
+            "out_size": int(row.size) if row.size is not None else None,
+        }
+        session_map = lookup.setdefault(parent, {})
+        for key in match_keys:
+            session_map[key] = info
+    ## END for row in outs.itertuples(index=False)....
+
+    return lookup
+
+
+def lookup_slurm_info_for_log(
+    slurm_lookup: dict[str, dict[str, dict]],
+    parent_path: str,
+    log_name: str,
+) -> Optional[dict]:
+    """Resolve slurm companion info for a debug log via header match, then kind."""
+    session_map = slurm_lookup.get(str(parent_path)) or {}
+    if not session_map:
+        return None
+    stem = _debug_log_stem(log_name)
+    if stem in session_map:
+        return session_map[stem]
+    keys = _parse_log_filename_keys(log_name)
+    if keys:
+        kind_key = f"__kind__{keys[-1].lower()}"
+        if kind_key in session_map:
+            return session_map[kind_key]
+    return None
+
+
+def _parse_ts_to_utc(value: Optional[str]) -> Optional[datetime]:
+    """Parse a log timestamp string to timezone-aware UTC datetime.
+
+    Naive timestamps (no offset) are interpreted as Great Lakes local time
+    (``America/Detroit``), then converted to UTC so they compare correctly with
+    Globus/FS ``out_mtime`` values which are already UTC.
+    """
+    if not value:
+        return None
+    text = str(value).strip().replace(",", ".")
+    try:
+        ts = pd.to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(ts):
+        return None
+    dt = ts.to_pydatetime()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_LOG_LOCAL_TZ)
+    return dt.astimezone(timezone.utc)
+
+
+def parse_debug_log_job_info(
+    log_text: str,
+    *,
+    log_name: str = "",
+    log_mtime=None,
+    slurm_info: Optional[dict] = None,
+    now: Optional[datetime] = None,
+) -> dict:
+    """Extract job_id, job_name, job_status, and Time Used from debug log text.
+
+    Status: Completed / Running / Failed / Unknown.
+    Time Used: ``batch_load_session`` start → completion (or ``now`` if running);
+    when ``slurm_info['out_mtime']`` is later than the log end, use it as the end
+    (hybrid alignment with Slurm finish).
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+
+    job_id = (slurm_info or {}).get("job_id")
+    job_name = (slurm_info or {}).get("job_name")
+    out_mtime = _coerce_utc_datetime((slurm_info or {}).get("out_mtime"))
+
+    has_traceback = "Traceback (most recent call last):" in (log_text or "")
+    has_failed_progress = bool(_FAILED_PROGRESS_RE.search(log_text or ""))
+    has_errors = bool(_ERRORS_NONEMPTY_RE.search(log_text or ""))
+    has_completed = bool(_COMPLETED_RE.search(log_text or ""))
+
+    # Explicit batch completion wins over mid-run Tracebacks (common in Figure jobs).
+    if has_failed_progress or has_errors:
+        job_status = "Failed"
+    elif has_completed:
+        job_status = "Completed"
+    elif has_traceback:
+        job_status = "Failed"
+    else:
+        age_hours = None
+        coerced_mtime = _coerce_utc_datetime(log_mtime)
+        if coerced_mtime is not None:
+            age_hours = (now - coerced_mtime).total_seconds() / 3600.0
+        if age_hours is not None and age_hours <= _RUNNING_AGE_HOURS:
+            job_status = "Running"
+        else:
+            job_status = "Unknown"
+
+    start = None
+    start_match = _BATCH_LOAD_START_RE.search(log_text or "")
+    if start_match:
+        start = _parse_ts_to_utc(start_match.group("ts"))
+
+    log_end = None
+    # Prefer timestamps on / near completion markers (scan last portion + all matches).
+    for match in _COMPLETED_RE.finditer(log_text or ""):
+        window_start = max(0, match.start() - 200)
+        window_end = min(len(log_text), match.end() + 200)
+        window = log_text[window_start:window_end]
+        for ts_match in _LOG_LINE_TS_RE.finditer(window):
+            parsed = _parse_ts_to_utc(ts_match.group("ts"))
+            if parsed is not None and (log_end is None or parsed > log_end):
+                log_end = parsed
+
+    if log_end is None and job_status in {"Completed", "Failed"}:
+        # Last timestamp anywhere in the log (often the INFO lines after ALL DONE).
+        for ts_match in _LOG_LINE_TS_RE.finditer(log_text or ""):
+            parsed = _parse_ts_to_utc(ts_match.group("ts"))
+            if parsed is not None and (log_end is None or parsed > log_end):
+                log_end = parsed
+        if log_end is None:
+            log_end = _coerce_utc_datetime(log_mtime)
+
+    time_used_seconds = None
+    time_used = None
+    if start is not None:
+        if job_status == "Running":
+            end = max(filter(None, [now, _coerce_utc_datetime(log_mtime)]), default=now)
+        else:
+            end = log_end
+            if end is None:
+                end = _coerce_utc_datetime(log_mtime)
+            if out_mtime is not None and end is not None and out_mtime > end:
+                end = out_mtime
+            elif out_mtime is not None and end is None and out_mtime > start:
+                end = out_mtime
+        if end is not None and end >= start:
+            time_used_seconds = (end - start).total_seconds()
+            time_used = _format_duration_hms(time_used_seconds)
+
+    return {
+        "job_id": job_id,
+        "job_name": job_name,
+        "job_status": job_status,
+        "time_used_seconds": time_used_seconds,
+        "time_used": time_used,
+        "start_time": start,
+        "log_name": log_name or None,
+    }
 
 
 def _editor_open_uris(path: PathLike) -> tuple[str, str, str]:
@@ -610,16 +935,105 @@ def build_session_status_df(
     return status_df.sort_values(by=["log_mtime"], ascending=False, na_position="last").reset_index(drop=True)
 
 
+def _job_status_css_class(job_status: Optional[str]) -> str:
+    """Map job_status label to a CSS class for accordion badges."""
+    key = (job_status or "Unknown").strip().lower()
+    return {
+        "completed": "job-status-completed",
+        "running": "job-status-running",
+        "failed": "job-status-failed",
+    }.get(key, "job-status-unknown")
+
+
+def _format_job_summary_html(job_info: dict) -> str:
+    """Render OOD-style ``job_id · name · Status · HH:MM:SS`` for accordion titles."""
+    parts: list[str] = []
+    if job_info.get("job_id"):
+        parts.append(html.escape(str(job_info["job_id"])))
+    if job_info.get("job_name"):
+        parts.append(html.escape(str(job_info["job_name"])))
+    status = job_info.get("job_status") or "Unknown"
+    status_cls = _job_status_css_class(status)
+    parts.append(f'<span class="{status_cls}">{html.escape(str(status))}</span>')
+    if job_info.get("time_used"):
+        parts.append(html.escape(str(job_info["time_used"])))
+    if not parts:
+        return ""
+    return f"<span class='log-summary-job'>{'  ·  '.join(parts)}</span>"
+
+
+_RUN_KDIBA_SESSION_PREFIX = "run_kdiba_"
+
+
+def _session_tab_display_names(parent_paths: Sequence[str]) -> dict[str, str]:
+    """Map parent paths to tab labels; strip ``run_kdiba_`` when stripped names stay unique."""
+    full_names = {p: Path(p).name for p in parent_paths}
+    stripped = {
+        p: (name[len(_RUN_KDIBA_SESSION_PREFIX):] if name.startswith(_RUN_KDIBA_SESSION_PREFIX) else name)
+        for p, name in full_names.items()
+    }
+    if len(set(stripped.values())) == len(stripped):
+        return stripped
+    return full_names
+
+
+def _session_tab_status_token(heuristic_status: str, n_running_jobs: int) -> str:
+    """Replace misleading ``finished`` with ``+N`` when any log job is still Running."""
+    if heuristic_status == "finished" and n_running_jobs > 0:
+        return f"+{n_running_jobs}"
+    return heuristic_status
+
+
+def _count_running_jobs_for_session_logs(
+    session_logs: pd.DataFrame,
+    slurm_lookup: Optional[dict] = None,
+    now: Optional[datetime] = None,
+) -> int:
+    """Count logs in ``session_logs`` whose parsed ``job_status`` is ``Running``."""
+    if session_logs is None or session_logs.empty:
+        return 0
+    if now is None:
+        now = datetime.now(timezone.utc)
+    lookup = slurm_lookup or {}
+    n_running = 0
+    for log_row in session_logs.itertuples(index=False):
+        log_path = getattr(log_row, "log_path", None)
+        if not log_path:
+            continue
+        text = read_log_tail(log_path, n_lines=0)
+        if text.startswith("(missing:") or text.startswith("(unreadable:"):
+            continue
+        log_name = str(getattr(log_row, "name", "") or Path(log_path).name)
+        parent_path = str(getattr(log_row, "parent_path", "") or "")
+        slurm_info = lookup_slurm_info_for_log(lookup, parent_path, log_name)
+        job_info = parse_debug_log_job_info(
+            text,
+            log_name=log_name,
+            log_mtime=getattr(log_row, "last_modified", None),
+            slurm_info=slurm_info,
+            now=now,
+        )
+        if job_info.get("job_status") == "Running":
+            n_running += 1
+    ## END for log_row in session_logs.itertuples(index=False)...
+
+    return n_running
+
+
 def _build_session_log_browser_html(
     recent_logs: pd.DataFrame,
     status_df: pd.DataFrame,
     n_tail_lines: int,
+    file_df: Optional[pd.DataFrame] = None,
 ) -> str:
     """Left-hand session tabs + expanded ``<details>`` accordion per log.
 
     Static HTML/CSS/JS only. ``mousedown`` preventDefault keeps clicks from
     stealing VS Code editor focus. The widget is capped to the notebook cell
     / viewport so log ``<pre>`` lines scroll inside ``.log-scroll``.
+
+    When ``file_df`` is provided, each log summary includes Slurm job ID, status,
+    and Time Used from ``parse_debug_log_job_info``.
     """
     global _SESSION_LOG_BROWSER_SEQ
     _SESSION_LOG_BROWSER_SEQ += 1
@@ -635,18 +1049,23 @@ def _build_session_log_browser_html(
         if not status_df.empty
         else {}
     )
+    slurm_lookup = build_slurm_out_lookup(file_df) if file_df is not None else {}
+    now = datetime.now(timezone.utc)
+    display_names = _session_tab_display_names(list(session_order.index))
 
     tab_buttons = []
     panels = []
     for session_i, parent_path in enumerate(session_order.index):
         session_logs = recent_logs[recent_logs["parent_path"] == parent_path]
-        session_name = Path(parent_path).name
         status = status_by_parent.get(parent_path, "?")
         newest_str = _format_log_mtime(session_order.loc[parent_path])
         n_shown = len(session_logs)
         is_active = session_i == 0
         active_cls = " is-active" if is_active else ""
-        tab_label = html.escape(f"[{status}] {session_name}")
+        n_running = _count_running_jobs_for_session_logs(session_logs, slurm_lookup, now)
+        status_token = _session_tab_status_token(status, n_running)
+        session_name = display_names[parent_path]
+        tab_label = html.escape(f"[{status_token}] {session_name}")
         tab_buttons.append(
             f'<button type="button" tabindex="-1" data-session-idx="{session_i}" '
             f'class="{active_cls.strip()}" role="tab" aria-selected="{str(is_active).lower()}" '
@@ -664,12 +1083,34 @@ def _build_session_log_browser_html(
             mtime_str = _format_log_mtime(log_row.last_modified)
             keys = _parse_log_filename_keys(log_row.name)
             keys_str = "  ·  ".join(keys)
+            slurm_info = lookup_slurm_info_for_log(
+                slurm_lookup, str(log_row.parent_path), str(log_row.name)
+            )
+            job_info = parse_debug_log_job_info(
+                full_text,
+                log_name=str(log_row.name),
+                log_mtime=log_row.last_modified,
+                slurm_info=slurm_info,
+                now=now,
+            )
+            job_html = _format_job_summary_html(job_info)
+            job_plain_parts = [
+                p for p in (
+                    job_info.get("job_id"),
+                    job_info.get("job_name"),
+                    job_info.get("job_status"),
+                    job_info.get("time_used"),
+                ) if p
+            ]
+            job_plain = "  ·  ".join(str(p) for p in job_plain_parts)
             summary_full = html.escape(
                 f"{log_row.name}  ·  {mtime_str}  ·  size={log_row.size}"
             )
             title_plain = f"{log_row.name}  ·  {mtime_str}  ·  size={log_row.size}"
             if keys_str:
                 title_plain = f"{log_row.name}  ·  {keys_str}  ·  {mtime_str}  ·  size={log_row.size}"
+            if job_plain:
+                title_plain = f"{title_plain}  ·  {job_plain}"
             keys_html = (
                 f"<span class='log-summary-keys'>{html.escape(keys_str)}</span>"
                 if keys_str
@@ -703,6 +1144,7 @@ def _build_session_log_browser_html(
                 f"<div class='log-summary-main'>"
                 f"<span class='log-summary-full'>{summary_full}</span>"
                 f"{keys_html}"
+                f"{job_html}"
                 f"</div>"
                 f"{actions_html}"
                 f"</div>"
@@ -715,7 +1157,7 @@ def _build_session_log_browser_html(
         ## END for log_row in session_logs.itertuples(index=False)....
 
         hidden_attr = "" if is_active else " hidden"
-        heading = f"[{html.escape(str(status))}] {html.escape(session_name)}"
+        heading = f"[{html.escape(str(status_token))}] {html.escape(session_name)}"
         panels.append(
             f'<div class="panel{active_cls}" data-session-idx="{session_i}" role="tabpanel"{hidden_attr}>'
             f'<div class="session-heading" title="{heading}">{heading}</div>'
@@ -819,7 +1261,66 @@ def _build_session_log_browser_html(
     )
 
 
-def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_lines: int = 0, most_recent_n_logs: int = 3, cutoff_date: Optional[DateLike] = None, max_num_day_ago: Optional[int] = 4, n_most_recent_files: int = 1, most_recent_only_log_file_df: Optional[pd.DataFrame] = None, **kwargs) -> pd.DataFrame:
+def _wrap_session_log_browser_document(html_fragment: str, *, title: str = "Session log browser") -> str:
+    """Wrap an HTML fragment from ``_build_session_log_browser_html`` in a full document."""
+    safe_title = html.escape(title)
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8"/>\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1"/>\n'
+        f"<title>{safe_title}</title>\n"
+        "<style>body { margin: 8px; }</style>\n"
+        "</head>\n"
+        f"<body>\n{html_fragment}\n</body>\n"
+        "</html>\n"
+    )
+
+
+def _save_session_log_browser_html(
+    html_fragment: str,
+    *,
+    path: Optional[PathLike] = None,
+    title: str = "Session log browser",
+) -> Path:
+    """Write a standalone HTML file; default path is under the system temp dir."""
+    if path is None:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        out = Path(tempfile.gettempdir()) / f"gen_scripts_log_browser_{stamp}.html"
+    else:
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        _wrap_session_log_browser_document(html_fragment, title=title),
+        encoding="utf-8",
+    )
+    return out
+
+
+def _open_html_in_default_browser(path: PathLike) -> None:
+    """Open a local HTML file in the system default browser."""
+    resolved = Path(path).resolve()
+    url = resolved.as_uri()
+    try:
+        webbrowser.open_new_tab(url)
+    except webbrowser.Error:
+        print("No browser available (likely headless server).")
+
+
+def show_session_log_browser(
+    root: PathLike = r"K:/scratch/gen_scripts",
+    n_tail_lines: int = 0,
+    most_recent_n_logs: int = 3,
+    cutoff_date: Optional[DateLike] = None,
+    max_num_day_ago: Optional[int] = 4,
+    n_most_recent_files: int = 1,
+    most_recent_only_log_file_df: Optional[pd.DataFrame] = None,
+    *,
+    open_in_browser: bool = False,
+    display_in_notebook: bool = True,
+    browser_html_path: Optional[PathLike] = None,
+) -> pd.DataFrame:
     """Display status table + left-tab session browser of recent logs.
 
     Sessions are left-hand tabs (newest log mtime first). Each session tab
@@ -838,7 +1339,16 @@ def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_
     folder + filename. Only matched rows are kept for status/selection so stale
     copy mtimes cannot win. Log contents still come from local paths under ``root``.
 
-    Returns the session status DataFrame.
+    Set ``open_in_browser=True`` to write a standalone HTML file and open it in
+    the system default browser. Use ``display_in_notebook=False`` with that to
+    avoid embedding the widget in the notebook (recommended when browsing
+    externally). Optionally pass ``browser_html_path`` for a stable output path;
+    otherwise a timestamped file is written under the system temp directory.
+    Prefer at least one of ``open_in_browser`` / ``display_in_notebook`` when
+    logs are present.
+
+    Returns the session status DataFrame (enriched with ``job_id``, ``job_status``,
+    and ``time_used`` for the newest log per session when parseable).
     """
     root_path = Path(root)
     resolved_cutoff = resolve_cutoff_date(
@@ -851,6 +1361,7 @@ def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_
             file_df = file_df[file_df["_mtime_overridden"]].copy()
         file_df = file_df.drop(columns=["_mtime_overridden"], errors="ignore")
     status_df = build_session_status_df(file_df, n_most_recent_files=n_most_recent_files)
+    status_df = enrich_status_df_with_job_info(status_df, file_df)
 
     recent_logs = select_recent_logs_by_session(
         file_df,
@@ -865,7 +1376,17 @@ def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_
     display(display_status)
 
     if not recent_logs.empty:
-        display(HTML(_build_session_log_browser_html(recent_logs, status_df, n_tail_lines)))
+        html_fragment = _build_session_log_browser_html(
+            recent_logs, status_df, n_tail_lines, file_df=file_df
+        )
+        if open_in_browser:
+            out_path = _save_session_log_browser_html(
+                html_fragment, path=browser_html_path
+            )
+            print(f"Opening session log browser: {out_path}")
+            _open_html_in_default_browser(out_path)
+        if display_in_notebook:
+            display(HTML(html_fragment))
     else:
         cutoff_msg = (
             f" newer than {resolved_cutoff.isoformat()}"
@@ -874,3 +1395,51 @@ def show_session_log_browser(root: PathLike = r"K:/scratch/gen_scripts", n_tail_
         )
         print(f"No .log files{cutoff_msg} found under {root_path}")
     return status_df
+
+
+def enrich_status_df_with_job_info(
+    status_df: pd.DataFrame,
+    file_df: Optional[pd.DataFrame] = None,
+    now: Optional[datetime] = None,
+) -> pd.DataFrame:
+    """Add ``job_id``, ``job_status``, ``time_used`` from each session's newest log."""
+    if status_df is None or status_df.empty:
+        out = status_df.copy() if status_df is not None else pd.DataFrame()
+        for col in ("job_id", "job_status", "time_used"):
+            if col not in out.columns:
+                out[col] = pd.Series(dtype=object)
+        return out
+
+    out = status_df.copy()
+    for col in ("job_id", "job_status", "time_used"):
+        if col not in out.columns:
+            out[col] = None
+
+    slurm_lookup = build_slurm_out_lookup(file_df) if file_df is not None else {}
+    if now is None:
+        now = datetime.now(timezone.utc)
+
+    for idx, row in out.iterrows():
+        log_path = row.get("log_path")
+        log_name = row.get("log_name")
+        if not log_path:
+            continue
+        text = read_log_tail(log_path, n_lines=0)
+        if text.startswith("(missing:") or text.startswith("(unreadable:"):
+            continue
+        slurm_info = lookup_slurm_info_for_log(
+            slurm_lookup, str(row.get("parent_path") or ""), str(log_name or Path(log_path).name)
+        )
+        job_info = parse_debug_log_job_info(
+            text,
+            log_name=str(log_name or Path(log_path).name),
+            log_mtime=row.get("log_mtime"),
+            slurm_info=slurm_info,
+            now=now,
+        )
+        out.at[idx, "job_id"] = job_info.get("job_id")
+        out.at[idx, "job_status"] = job_info.get("job_status")
+        out.at[idx, "time_used"] = job_info.get("time_used")
+    ## END for idx, row in out.iterrows()....
+
+    return out

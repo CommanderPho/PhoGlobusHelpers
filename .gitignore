@@ -5,3 +5,6 @@ FM-{*}.ico
 .cursorindexingignore.bak
 .cursor/rules/derived-cursor-rules.mdc
 .specstory/
+EXTERNAL/outputs
+.serena/project.local.yml
+.serena/project.yml
