@@ -28,6 +28,7 @@
 			"list.inactiveSelectionBackground": "#4c1d9580",
 			"list.hoverBackground": "#6b21a850"
 		},
-		"diffEditor.renderSideBySide": true
+		"diffEditor.renderSideBySide": true,
+		"specstory.cloudSync.enabled": "never"
 	}
 }
