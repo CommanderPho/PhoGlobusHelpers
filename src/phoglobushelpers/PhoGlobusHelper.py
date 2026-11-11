@@ -685,14 +685,7 @@ class GlobusConnector:
         return path_df
 
 
-    def perform_copy_files(
-        self,
-        active_file_df: pd.DataFrame,
-        transfer: TransferRequest,
-        synchronous_wait: bool = True,
-        preserve_timestamp: bool = False,
-        dry_run: bool = False,
-    ) -> pd.DataFrame:
+    def perform_copy_files(self, active_file_df: pd.DataFrame, transfer: TransferRequest, synchronous_wait: bool = True, preserve_timestamp: bool = False, dry_run: bool = False) -> pd.DataFrame:
         """Copy files between endpoints; return source/dest path DataFrame.
 
         `preserve_timestamp` defaults False (unsupported servers fail the whole

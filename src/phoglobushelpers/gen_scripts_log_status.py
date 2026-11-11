@@ -40,9 +40,9 @@ _SESSION_LOG_BROWSER_CSS = """
   min-width: 0;
   overflow: hidden;
   max-height: 80vh;
-  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
-  background: var(--vscode-editor-background, var(--jp-layout-color0, transparent));
-  color: var(--vscode-editor-foreground, var(--jp-ui-font-color1, inherit));
+  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #3c3c3c));
+  background: var(--vscode-editor-background, var(--jp-layout-color0, #1e1e1e));
+  color: var(--vscode-editor-foreground, var(--jp-ui-font-color1, #cccccc));
 }
 .gen-scripts-log-browser .tablist {
   display: flex;
@@ -53,7 +53,8 @@ _SESSION_LOG_BROWSER_CSS = """
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  border-right: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
+  border-right: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #3c3c3c));
+  background: var(--vscode-sideBar-background, var(--jp-layout-color1, #252526));
 }
 .gen-scripts-log-browser .tablist button {
   appearance: none;
@@ -71,8 +72,11 @@ _SESSION_LOG_BROWSER_CSS = """
   cursor: pointer;
   font: inherit;
 }
+.gen-scripts-log-browser .tablist button:hover:not(.is-active) {
+  background: #2a2d2e;
+}
 .gen-scripts-log-browser .tablist button.is-active {
-  background: var(--vscode-list-activeSelectionBackground, var(--jp-layout-color2, #e8e8e8));
+  background: var(--vscode-list-activeSelectionBackground, var(--jp-layout-color2, #094771));
   border-left-color: var(--vscode-focusBorder, #007acc);
   font-weight: 600;
 }
@@ -107,14 +111,14 @@ _SESSION_LOG_BROWSER_CSS = """
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ddd));
+  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #3c3c3c));
 }
 .gen-scripts-log-browser summary {
   cursor: pointer;
   padding: 8px 10px;
   font-weight: 600;
   overflow: hidden;
-  background: var(--vscode-sideBar-background, var(--jp-layout-color1, rgba(127,127,127,0.08)));
+  background: var(--vscode-sideBar-background, var(--jp-layout-color1, #252526));
 }
 .gen-scripts-log-browser .log-summary-head {
   display: flex;
@@ -169,15 +173,15 @@ _SESSION_LOG_BROWSER_CSS = """
   line-height: 1.2;
   padding: 3px 8px;
   cursor: pointer;
-  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #ccc));
+  border: 1px solid var(--vscode-panel-border, var(--jp-border-color1, #3c3c3c));
   border-radius: 3px;
-  background: var(--vscode-button-secondaryBackground, var(--jp-layout-color2, rgba(127,127,127,0.12)));
+  background: var(--vscode-button-secondaryBackground, var(--jp-layout-color2, #3a3d41));
   color: inherit;
   text-decoration: none;
   white-space: nowrap;
 }
 .gen-scripts-log-browser .log-action:hover {
-  background: var(--vscode-button-secondaryHoverBackground, var(--jp-layout-color3, rgba(127,127,127,0.22)));
+  background: var(--vscode-button-secondaryHoverBackground, var(--jp-layout-color3, #45494e));
 }
 .gen-scripts-log-browser .log-action.is-copied {
   border-color: #3fb950;
@@ -1271,7 +1275,11 @@ def _wrap_session_log_browser_document(html_fragment: str, *, title: str = "Sess
         '<meta charset="utf-8"/>\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1"/>\n'
         f"<title>{safe_title}</title>\n"
-        "<style>body { margin: 8px; }</style>\n"
+        "<style>"
+        "html, body { margin: 0; padding: 0; min-height: 100%; "
+        "background: #1e1e1e; color: #cccccc; }"
+        "body { padding: 8px; box-sizing: border-box; }"
+        "</style>\n"
         "</head>\n"
         f"<body>\n{html_fragment}\n</body>\n"
         "</html>\n"

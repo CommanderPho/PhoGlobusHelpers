@@ -7,6 +7,7 @@ from unittest.mock import patch
 import webbrowser
 
 from phoglobushelpers.gen_scripts_log_status import (
+    _SESSION_LOG_BROWSER_CSS,
     _open_html_in_default_browser,
     _save_session_log_browser_html,
     _wrap_session_log_browser_document,
@@ -19,8 +20,26 @@ def test_wrap_session_log_browser_document_embeds_fragment():
     assert doc.startswith("<!DOCTYPE html>")
     assert "<meta charset=\"utf-8\"/>" in doc
     assert "<title>My Logs &lt;x&gt;</title>" in doc
-    assert "body { margin: 8px; }" in doc
+    assert "background: #1e1e1e" in doc
+    assert "color: #cccccc" in doc
+    assert "body { padding: 8px; box-sizing: border-box; }" in doc
     assert fragment in doc
+
+
+def test_session_log_browser_css_dark_fallbacks():
+    css = _SESSION_LOG_BROWSER_CSS
+    assert "var(--jp-layout-color0, #1e1e1e)" in css
+    assert "var(--jp-ui-font-color1, #cccccc)" in css
+    assert "var(--jp-border-color1, #3c3c3c)" in css
+    assert "var(--jp-layout-color2, #094771)" in css
+    assert "var(--jp-layout-color1, #252526)" in css
+    assert "var(--jp-layout-color2, #3a3d41)" in css
+    assert "var(--jp-layout-color3, #45494e)" in css
+    assert "button:hover:not(.is-active)" in css
+    assert "background: #2a2d2e;" in css
+    # Main shell must not fall back to transparent/inherit outside the host.
+    assert "var(--jp-layout-color0, transparent)" not in css
+    assert "var(--jp-ui-font-color1, inherit)" not in css
 
 
 def test_save_session_log_browser_html_writes_utf8(tmp_path: Path):
